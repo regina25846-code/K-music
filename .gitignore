@@ -1,0 +1,5 @@
+node_modules/
+dist/
+bin/yt-dlp
+bin/yt-dlp.exe
+*.log
