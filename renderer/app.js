@@ -89,12 +89,22 @@ function switchView(v) {
 }
 document.querySelectorAll('.nav-btn[data-view]').forEach(b => b.addEventListener('click', () => switchView(b.dataset.view)));
 
+// ── theme ─────────────────────────────────────────────────────────────────────
+function applyTheme(theme) {
+  if (!theme || theme === 'default') {
+    document.documentElement.removeAttribute('data-theme');
+  } else {
+    document.documentElement.setAttribute('data-theme', theme);
+  }
+}
+
 // ── settings overlay ──────────────────────────────────────────────────────────
 async function openSettings() {
   $('cfg-quality').value = config.quality || '192';
+  $('cfg-theme').value = config.theme || 'default';
   $('cfg-auto').checked = !!config.autoplay;
   $('cfg-resume').checked = !!config.resume;
-  $('auto-sub').textContent = config.autoplay ? 'On' : 'Off';
+  $('auto-sub').textContent = config.autoplay ? '켜짐' : '꺼짐';
   $('cfg-startup').checked = await window.api.getLoginItem();
   $('settings-ov').classList.add('show');
 }
@@ -102,14 +112,17 @@ function closeSettings() { $('settings-ov').classList.remove('show'); }
 $('nav-settings').onclick = openSettings;
 $('settings-close').onclick = closeSettings;
 $('settings-ov').addEventListener('click', e => { if(e.target===$('settings-ov')) closeSettings(); });
-$('cfg-auto').onchange = function() { $('auto-sub').textContent = this.checked ? 'On' : 'Off'; };
+$('cfg-auto').onchange = function() { $('auto-sub').textContent = this.checked ? '켜짐' : '꺼짐'; };
 $('settings-save').onclick = async () => {
+  const theme = $('cfg-theme').value;
   await saveCfg({
     quality: $('cfg-quality').value,
+    theme,
     autoplay: $('cfg-auto').checked,
     resume: $('cfg-resume').checked,
     alwaysOnTop: config.alwaysOnTop
   });
+  applyTheme(theme);
   await window.api.setLoginItem($('cfg-startup').checked);
   closeSettings();
   toast('설정 저장됨');
@@ -318,7 +331,8 @@ $('btn-shuffle').onclick = function() {
   shuffle=!shuffle; this.classList.toggle('active', shuffle);
   toast(shuffle?'셔플 켜짐':'셔플 꺼짐');
 };
-volSlider.oninput = function() { audio.volume=this.value/100; };
+function updateVolSlider() { volSlider.style.setProperty('--vol-pct', volSlider.value + '%'); }
+volSlider.oninput = function() { audio.volume=this.value/100; updateVolSlider(); };
 volSlider.onchange = function() { saveCfg({volume:parseInt(this.value)}); };
 
 // ── search ────────────────────────────────────────────────────────────────────
@@ -440,8 +454,10 @@ $('btn-pin').onclick = async function() {
   config = await window.api.getConfig();
   playlists = await window.api.getPlaylists();
   if (!playlists?.length) playlists=[{id:uid(),name:'My Playlist',tracks:[]}];
+  applyTheme(config.theme);
   volSlider.value = config.volume??80;
   audio.volume = volSlider.value/100;
+  updateVolSlider();
   renderTabs(); renderTrackList();
   if (config.resume && config.lastPlId) {
     const pi = playlists.findIndex(p=>p.id===config.lastPlId);
