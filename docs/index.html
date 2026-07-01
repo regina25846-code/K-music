@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>K-Music 다운로드</title>
+<link rel="preconnect" href="https://cdn.jsdelivr.net"/>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css"/>
+<style>
+  :root {
+    --bg: #fffdf5; --bg2: #ffffff; --bg3: #fef9ec;
+    --accent: #d97706; --border: #e8dfc0;
+    --text: #1c1710; --text2: #4a3f2a; --text3: #8a7a54;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'Pretendard','Noto Sans KR','Segoe UI',sans-serif; letter-spacing: -0.01em; }
+  .header { background: var(--bg2); border-bottom: 1px solid var(--border); padding: 20px 0; }
+  .header-inner { max-width: 720px; margin: 0 auto; padding: 0 24px; display: flex; align-items: center; gap: 16px; }
+  .logo { font-size: 20px; font-weight: 900; color: var(--accent); }
+  .logo span { color: var(--text); font-weight: 400; }
+  .header-sub { font-size: 14px; color: var(--text3); margin-top: 2px; }
+  .container { max-width: 720px; margin: 0 auto; padding: 40px 24px; }
+  .version-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 14px; padding: 28px; margin-bottom: 28px; }
+  .ver-row { display: flex; align-items: center; gap: 16px; margin-bottom: 20px; flex-wrap: wrap; }
+  .ver-badge { background: var(--accent); color: #fff; font-size: 20px; font-weight: 800; padding: 6px 18px; border-radius: 20px; }
+  .ver-date { color: var(--text3); font-size: 14px; }
+  .dl-btns { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 20px; }
+  .dl-btn { display: inline-flex; align-items: center; gap: 8px; background: var(--accent); color: #fff; text-decoration: none; font-weight: 700; font-size: 14px; padding: 10px 22px; border-radius: 8px; transition: opacity .2s; }
+  .dl-btn.portable { background: #fff; color: var(--text); border: 1px solid var(--border); }
+  .dl-btn:hover { opacity: 0.85; }
+  .how-to { background: var(--bg3); border-radius: 10px; padding: 16px 20px; }
+  .how-to h4 { font-size: 14px; font-weight: 700; margin-bottom: 10px; color: var(--text2); }
+  .how-to ol { padding-left: 18px; font-size: 14px; line-height: 2; color: var(--text2); }
+  .features { background: var(--bg2); border: 1px solid var(--border); border-radius: 14px; padding: 28px; margin-bottom: 28px; }
+  .features h3 { font-size: 16px; font-weight: 700; margin-bottom: 16px; }
+  .feat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .feat-item { background: var(--bg3); border-radius: 10px; padding: 14px 16px; }
+  .feat-item strong { display: block; font-size: 13px; font-weight: 700; margin-bottom: 4px; }
+  .feat-item span { font-size: 12px; color: var(--text2); }
+  details.history-wrap { margin-bottom: 28px; }
+  details.history-wrap > summary { cursor: pointer; list-style: none; padding: 14px 18px; background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; font-weight: 800; font-size: 16px; display: flex; align-items: center; justify-content: space-between; }
+  details.history-wrap > summary::-webkit-details-marker { display: none; }
+  details.history-wrap > summary:hover { background: var(--bg3); }
+  details.history-wrap[open] > summary { border-radius: 10px 10px 0 0; border-bottom: none; }
+  .history-body { border: 1px solid var(--border); border-top: none; border-radius: 0 0 10px 10px; background: var(--bg2); padding: 4px 0; }
+  .ver-entry { padding: 14px 20px; border-bottom: 1px solid var(--border); }
+  .ver-entry:last-child { border-bottom: none; }
+  .ver-entry-hdr { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+  .ver-num { color: var(--accent); font-weight: 700; }
+  .ver-dt { color: var(--text3); font-size: 14px; margin-left: auto; }
+  .ver-entry ul { padding-left: 18px; font-size: 14px; line-height: 2; color: var(--text2); }
+  .footer { text-align: center; color: var(--text3); font-size: 13px; margin-top: 40px; padding-bottom: 32px; }
+</style>
+</head>
+<body>
+<div class="header">
+  <div class="header-inner">
+    <div>
+      <div class="logo">K<span>-Music</span></div>
+      <div class="header-sub">PC용 유튜브 뮤직 스트리밍 플레이어</div>
+    </div>
+  </div>
+</div>
+<div class="container">
+  <div class="version-card">
+    <div class="ver-row">
+      <span class="ver-badge">v1.1.0</span>
+      <span class="ver-date">2026-06-26</span>
+    </div>
+    <div class="dl-btns">
+      <a class="dl-btn" href="https://github.com/regina25846-code/K-music/releases/download/v1.1.0/K-Music.Setup.1.1.0.exe">⬇ 설치형 다운로드</a>
+      <a class="dl-btn portable" href="https://github.com/regina25846-code/K-music/releases/download/v1.1.0/K-Music-1.1.0-portable.exe">⬇ 포터블 다운로드</a>
+    </div>
+    <div class="how-to">
+      <h4>설치 안내</h4>
+      <ol>
+        <li>설치형 다운로드 클릭 후 exe 실행</li>
+        <li>Windows 보안 경고 시 "추가 정보" → "그래도 실행"</li>
+        <li>설치 완료 후 K-Music 실행</li>
+      </ol>
+    </div>
+  </div>
+  <div class="features">
+    <h3>주요 기능</h3>
+    <div class="feat-grid">
+      <div class="feat-item"><strong>🎵 유튜브 스트리밍</strong><span>다운로드 없이 바로 재생 (yt-dlp)</span></div>
+      <div class="feat-item"><strong>🔍 유튜브 검색</strong><span>검색 결과에서 바로 추가</span></div>
+      <div class="feat-item"><strong>📋 플레이리스트</strong><span>여러 개 만들어 관리</span></div>
+      <div class="feat-item"><strong>🎚 음질 설정</strong><span>128k / 192k / 320k 선택</span></div>
+      <div class="feat-item"><strong>🔀 셔플·반복</strong><span>전체·한곡 반복, 셔플 모드</span></div>
+      <div class="feat-item"><strong>🖥 트레이 백그라운드</strong><span>창 닫아도 계속 재생</span></div>
+      <div class="feat-item"><strong>📌 항상 위 고정</strong><span>다른 창 위에 표시</span></div>
+      <div class="feat-item"><strong>🔄 자동 업데이트</strong><span>새 버전 자동 감지</span></div>
+    </div>
+  </div>
+  <details class="history-wrap">
+    <summary>버전별 업데이트 내역 <span>▼</span></summary>
+    <div class="history-body">
+      <div class="ver-entry">
+        <div class="ver-entry-hdr"><span class="ver-num">v1.1.0</span><span class="ver-dt">2026-06-26</span></div>
+        <ul>
+          <li>UI 전면 리디자인 — 앰버 골드 다크 테마 기본 적용</li>
+          <li>스킨 선택 — 앰버 골드 / 라이트 화이트 (설정에서 선택)</li>
+          <li>새 로고 디자인</li>
+          <li>헤더 호버 시에만 버튼 표시</li>
+          <li>설정 화면 한국어 적용</li>
+          <li>KoPubWorld Dotum Medium 폰트 내장</li>
+        </ul>
+      </div>
+      <div class="ver-entry">
+        <div class="ver-entry-hdr"><span class="ver-num">v1.0.0</span><span class="ver-dt">2026-06-19</span></div>
+        <ul>
+          <li>유튜브 URL 직접 추가 재생</li>
+          <li>유튜브 검색 기능</li>
+          <li>플레이리스트 여러 개 관리</li>
+          <li>yt-dlp 스트리밍</li>
+          <li>음질 설정, 셔플·반복 모드</li>
+          <li>볼륨 조절, 트레이 백그라운드 재생</li>
+          <li>항상 위 고정, 시작 프로그램 등록</li>
+          <li>자동업데이트 지원</li>
+        </ul>
+      </div>
+    </div>
+  </details>
+  <div class="footer">K-Music · KrisB · Windows 10/11 64bit</div>
+</div>
+</body>
+</html>
