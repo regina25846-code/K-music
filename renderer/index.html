@@ -108,9 +108,9 @@ html, body {
 .view.active { display: flex; }
 
 /* ── HOME: PLAYER ── */
-.player { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 4px 16px 8px; flex-shrink: 0; }
+.player { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 4px 16px 4px; flex-shrink: 0; }
 .album-art {
-  width: 180px; height: 180px; border-radius: 12px; object-fit: cover;
+  width: 80px; height: 80px; border-radius: 12px; object-fit: cover;
   background: var(--card); flex-shrink: 0;
   box-shadow: 0 8px 24px rgba(0,0,0,0.4);
 }
@@ -172,7 +172,7 @@ input[type=range].vol::-webkit-slider-thumb {
 .track-list { flex: 1; overflow-y: auto; padding: 4px 12px; scrollbar-width: none; }
 .track-list::-webkit-scrollbar { display: none; }
 .track-item {
-  display: flex; align-items: center; gap: 12px; padding: 8px;
+  display: flex; align-items: center; gap: 12px; padding: 6px 8px;
   border-radius: 8px; cursor: pointer; transition: background 0.2s;
 }
 .track-item:hover { background: var(--card); }
