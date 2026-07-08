@@ -43,8 +43,9 @@
   --k-color:   #6366F1;
 }
 
+html { height: 100%; }
 html, body {
-  width: 400px; height: 680px; overflow: hidden;
+  width: 400px; min-height: 680px; height: 100%; overflow: hidden;
   background: var(--bg); color: var(--text);
   font-family: 'KoPubWorld Dotum', 'Segoe UI', 'Apple SD Gothic Neo', sans-serif;
   user-select: none;
@@ -374,6 +375,8 @@ input[type=range].vol::-webkit-slider-thumb {
 [data-theme="white"] .ctrl-btn.play { background: #0D0D1A; color: #FFFFFF; }
 [data-theme="white"] .ctrl-btn.play:hover { background: #6366F1; }
 [data-theme="white"] .srow-icon { background: #ECEEF8; }
+[data-theme="white"] .settings-save { background: #0D0D1A; color: #FFFFFF; }
+[data-theme="white"] .settings-save:hover { background: #6366F1; color: #FFFFFF; }
 </style>
 </head>
 <body>
