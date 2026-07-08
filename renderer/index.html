@@ -55,9 +55,10 @@ html, body {
 /* ── HEADER ── */
 .header {
   -webkit-app-region: drag;
+  position: relative;
   display: flex; align-items: center; justify-content: space-between;
-  padding: 16px 20px 12px;
-  height: 56px;
+  padding: 10px 20px;
+  height: 64px;
 }
 .add-url-btn {
   -webkit-app-region: no-drag;
@@ -71,8 +72,9 @@ html, body {
 .add-url-btn .label { font-size: 11px; font-weight: 600; letter-spacing: 0.03em; }
 
 .app-title {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
   font-size: 16px; color: var(--text); line-height: 1;
-  display: flex; align-items: baseline; gap: 6px;
+  display: flex; align-items: center; gap: 6px;
 }
 .app-title .bold { font-weight: 800; font-family: 'Segoe UI', sans-serif; letter-spacing: 0.5px; }
 .app-title .italic { font-style: italic; font-weight: 400; font-size: 14px; color: var(--text2); }
@@ -387,7 +389,7 @@ input[type=range].vol::-webkit-slider-thumb {
     <span class="label">Add URL</span>
   </button>
   <div class="app-title">
-    <div style="font-family:'Cormorant Garamond',serif;display:flex;flex-direction:column;align-items:center;gap:2px;line-height:1;"><span style="font-size:30px;font-weight:700;font-style:italic;color:var(--k-color);">K</span><span style="font-size:9px;font-weight:500;letter-spacing:0.45em;color:var(--text);text-transform:uppercase;padding-left:0.45em;">music</span></div>
+    <img src="../assets/logo.png" alt="K-Music" style="height:42px;width:auto;display:block;" />
   </div>
   <div class="win-btns">
     <button class="win-btn" id="btn-pin" title="Always On Top"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16h14v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/></svg></button>
