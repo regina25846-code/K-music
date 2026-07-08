@@ -1,6 +1,6 @@
 {
   "name": "kris-music",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "K-Music Player — Lightweight YouTube Music Player",
   "main": "main.js",
   "scripts": {
@@ -44,7 +44,8 @@
     },
     "nsis": {
       "oneClick": false,
-      "allowToChangeInstallationDirectory": false
+      "allowToChangeInstallationDirectory": false,
+      "runAfterFinish": false
     },
     "portable": {
       "artifactName": "K-Music-${version}-portable.exe"
