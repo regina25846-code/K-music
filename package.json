@@ -11,12 +11,17 @@
     "appId": "com.kris.music",
     "productName": "K-Music",
     "asar": false,
+    "compression": "maximum",
+    "electronLanguages": [
+      "ko",
+      "en-US"
+    ],
     "extraResources": [
       {
         "from": "bin/",
         "to": "bin/",
         "filter": [
-          "**/*"
+          "*.exe"
         ]
       }
     ],
