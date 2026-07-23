@@ -4,50 +4,50 @@
 <meta charset="UTF-8"/>
 <title>K-Music</title>
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;1,700&display=swap');
-@font-face {
-  font-family: 'KoPubWorld Dotum';
-  src: url('./fonts/KoPubWorld Dotum Medium.ttf') format('truetype');
-  font-weight: 500;
-}
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
-  --bg:        #12100A;
-  --panel:     #1C1A0F;
-  --card:      #26231A;
-  --active-tr: #302C20;
-  --text:      #FFFFFF;
-  --text2:     #D4C89A;
-  --text3:     #8A7A54;
-  --border:    #3D3825;
-  --prog:      #FBBF24;
-  --nav-bg:    #080700;
-  --tog-blue:  #FBBF24;
-  --tog-green: #FBBF24;
-  --k-color:   #FBBF24;
+  --bg:        #0E0E12;
+  --panel:     #16161C;
+  --card:      #1C1C24;
+  --active-tr: #24242E;
+  --text:      #F2F2F5;
+  --text2:     #9A9AA8;
+  --text3:     #78788A;
+  --border:    #2A2A34;
+  --line:      #202028;
+  --prog:      #FF5C3D;
+  --nav-bg:    #09090C;
+  --tog-blue:  #FF5C3D;
+  --tog-green: #FF5C3D;
+  --k-color:   #FF5C3D;
+  --readout:   #C7B8A0;
+  --mono: ui-monospace, "SF Mono", "JetBrains Mono", "Menlo", "Consolas", monospace;
+  --sans: system-ui, -apple-system, "Segoe UI", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", sans-serif;
 }
 [data-theme="white"] {
-  --bg:        #FFFFFF;
-  --panel:     #F5F5FC;
-  --card:      #ECEEF8;
-  --active-tr: #E0E2F4;
-  --text:      #0D0D1A;
-  --text2:     #3A3A5C;
-  --text3:     #7878A8;
-  --border:    #D0D0E8;
-  --prog:      #6366F1;
-  --nav-bg:    #FFFFFF;
-  --tog-blue:  #6366F1;
-  --tog-green: #6366F1;
-  --k-color:   #6366F1;
+  --bg:        #EDECE8;
+  --panel:     #F7F6F3;
+  --card:      #FFFFFF;
+  --active-tr: #F0EFEA;
+  --text:      #17171B;
+  --text2:     #5C5C64;
+  --text3:     #97968F;
+  --border:    #DEDDD6;
+  --line:      #E7E6E0;
+  --prog:      #E8492A;
+  --nav-bg:    #F7F6F3;
+  --tog-blue:  #E8492A;
+  --tog-green: #E8492A;
+  --k-color:   #E8492A;
+  --readout:   #6B5B43;
 }
 
 html { height: 100%; }
 html, body {
   width: 400px; min-height: 680px; height: 100%; overflow: hidden;
   background: var(--bg); color: var(--text);
-  font-family: 'KoPubWorld Dotum', 'Segoe UI', 'Apple SD Gothic Neo', sans-serif;
+  font-family: var(--sans);
   user-select: none;
   display: flex; flex-direction: column;
 }
@@ -57,27 +57,22 @@ html, body {
   -webkit-app-region: drag;
   position: relative;
   display: flex; align-items: center; justify-content: space-between;
-  padding: 10px 20px;
-  height: 64px;
+  padding: 14px 18px 10px;
+  height: 56px;
 }
-.add-url-btn {
-  -webkit-app-region: no-drag;
-  display: flex; align-items: center; gap: 6px;
-  background: transparent; border: none; cursor: pointer; color: var(--text2);
-  opacity: 0; pointer-events: none; transition: color 0.2s, opacity 0.25s;
-}
-.header:hover .add-url-btn { opacity: 1; pointer-events: auto; }
-.add-url-btn:hover { color: var(--text); }
-.add-url-btn .plus { color: inherit; display: flex; align-items: center; }
-.add-url-btn .label { font-size: 11px; font-weight: 600; letter-spacing: 0.03em; }
-
 .app-title {
-  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
   font-size: 16px; color: var(--text); line-height: 1;
-  display: flex; align-items: center; gap: 6px;
+  display: flex; align-items: center; gap: 9px;
 }
-.app-title .bold { font-weight: 800; font-family: 'Segoe UI', sans-serif; letter-spacing: 0.5px; }
-.app-title .italic { font-style: italic; font-weight: 400; font-size: 14px; color: var(--text2); }
+.brand-mark {
+  width: 26px; height: 26px; border-radius: 8px; flex-shrink: 0;
+  background: linear-gradient(150deg, var(--prog), #C8341C);
+  display: flex; align-items: center; justify-content: center;
+  color: #fff; font-weight: 800; font-size: 14px;
+  box-shadow: 0 2px 8px -1px rgba(255,92,61,0.4);
+}
+.brand-word { font-weight: 800; font-size: 15px; letter-spacing: -0.01em; color: var(--text); }
+.brand-word .sub { color: var(--text3); font-weight: 500; }
 
 .win-btns {
   -webkit-app-region: no-drag;
@@ -95,8 +90,8 @@ html, body {
 .search-wrap { padding: 0 20px 12px; }
 .search-box {
   display: flex; align-items: center; gap: 10px;
-  background: var(--card); border: 1px solid transparent; border-radius: 8px;
-  padding: 8px 14px; transition: border-color 0.2s, background 0.2s;
+  background: var(--card); border: 1px solid transparent; border-radius: 11px;
+  padding: 9px 13px; transition: border-color 0.2s, background 0.2s;
 }
 .search-box:focus-within { border-color: var(--border); background: var(--panel); }
 .search-box .icon { color: var(--text3); display: flex; align-items: center; }
@@ -105,19 +100,74 @@ html, body {
   font-size: 13px; color: var(--text); font-family: inherit;
 }
 .search-box input::placeholder { color: var(--text3); }
+.search-box .kbd {
+  font-family: var(--mono); font-size: 10px; color: var(--text3);
+  border: 1px solid var(--border); border-radius: 5px; padding: 2px 6px; flex-shrink: 0;
+}
 
 /* ── VIEWS ── */
 .view { display: none; flex-direction: column; flex: 1; overflow: hidden; }
 .view.active { display: flex; }
 
 /* ── HOME: PLAYER ── */
-.player { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 4px 16px 4px; flex-shrink: 0; }
-.album-art {
-  width: 80px; height: 80px; border-radius: 12px; object-fit: cover;
-  background: var(--card); flex-shrink: 0;
-  box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+.player { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 4px 16px 4px; flex-shrink: 0; position: relative; transition: background 0.55s; }
+body.lyrics-mode .player { background: rgba(0,0,0,0.15); }
+.np-glow {
+  position: absolute; left: 50%; top: 4px; transform: translateX(-50%);
+  width: 220px; height: 170px; border-radius: 50%;
+  background: radial-gradient(closest-side, var(--glow, var(--prog)) 0%, transparent 72%);
+  opacity: 0.5; filter: blur(16px); pointer-events: none; z-index: 0;
+  transition: opacity 0.55s, width 0.55s, height 0.55s;
 }
-.album-art.default { display: flex; align-items: center; justify-content: center; font-size: 48px; color: var(--border); }
+[data-theme="white"] .np-glow { opacity: 0.3; }
+body.lyrics-mode .np-glow { opacity: 0.75; width: 280px; height: 220px; }
+[data-theme="white"] body.lyrics-mode .np-glow { opacity: 0.5; }
+.np-inner { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; width: 100%; }
+.art-row { display: flex; align-items: stretch; justify-content: center; width: 100%; }
+.art-seek { flex: 1; cursor: pointer; border-radius: 12px; transition: background 0.15s; }
+.art-seek:active { background: rgba(255,255,255,0.06); }
+.art-wrap {
+  position: relative; width: 168px; height: 168px; border-radius: 16px; cursor: pointer; flex-shrink: 0;
+  box-shadow: 0 14px 30px -10px rgba(0,0,0,0.5);
+  transition: transform 0.55s cubic-bezier(.34,1.56,.64,1), box-shadow 0.55s;
+}
+body.lyrics-mode .art-wrap {
+  transform: perspective(500px) rotateX(11deg) translateY(-10px) scale(1.09);
+  box-shadow: 0 32px 54px -14px rgba(0,0,0,0.85), 0 0 0 1px rgba(255,255,255,0.06);
+}
+.album-art {
+  width: 100%; height: 100%; border-radius: inherit; object-fit: cover;
+  background: var(--card); display: block;
+}
+.album-art.default {
+  background: radial-gradient(120% 90% at 72% 18%, #E8A0B4 0%, transparent 45%),
+              radial-gradient(140% 120% at 20% 88%, #3B2A55 0%, transparent 55%),
+              linear-gradient(150deg, #6E4E7E 0%, #2B2140 100%);
+}
+[data-theme="white"] .album-art.default {
+  background: radial-gradient(90% 90% at 78% 22%, #FFD9A0 0%, transparent 50%),
+              linear-gradient(150deg, #E86A8B 0%, #B23A6B 100%);
+}
+.art-overlay {
+  position: absolute; inset: 0; border-radius: inherit; background: rgba(10,8,3,0.72);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+  opacity: 0; transition: opacity 0.2s; color: var(--prog); pointer-events: none;
+}
+.art-wrap:hover .art-overlay { opacity: 1; }
+.art-overlay span { font-size: 10px; font-weight: 700; color: #fff; }
+.art-badge {
+  position: absolute; right: 6px; bottom: 6px; font-family: var(--mono); font-size: 9px; font-weight: 600;
+  letter-spacing: 0.06em; color: #fff; background: rgba(0,0,0,0.55); backdrop-filter: blur(4px);
+  padding: 3px 7px; border-radius: 6px; transition: opacity 0.3s;
+}
+body.lyrics-mode .art-badge { opacity: 0; }
+
+/* ── VU METER ── */
+.vu { display: flex; align-items: flex-end; justify-content: center; gap: 3px; height: 18px; margin: 2px 0; }
+.vu i { width: 3px; border-radius: 2px; background: var(--prog); opacity: 0.9; height: 20%; animation: vu-bounce 1.1s ease-in-out infinite; }
+.vu.paused i { animation-play-state: paused; height: 20%; }
+@keyframes vu-bounce { 0%, 100% { height: 20%; } 50% { height: 100%; } }
+@media (prefers-reduced-motion: reduce) { .vu i, .eq i { animation: none !important; } }
 .track-title { font-size: 18px; font-weight: 800; color: var(--text); text-align: center; max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .track-channel { font-size: 12px; color: var(--text2); text-align: center; }
 
@@ -135,17 +185,15 @@ html, body {
 .time-row { display: flex; justify-content: space-between; margin-top: 4px; }
 .time-row span { font-size: 10px; color: var(--text3); font-weight: 500; }
 
-.controls { display: flex; align-items: center; width: 100%; padding: 0; }
-.ctrl-center { display: flex; align-items: center; gap: 20px; flex: 1; justify-content: center; }
+.controls { display: flex; align-items: center; justify-content: center; gap: 22px; width: 100%; padding: 0; }
 .ctrl-btn { background: none; border: none; cursor: pointer; color: var(--text); display: flex; align-items: center; justify-content: center; transition: transform 0.1s, color 0.2s; }
 .ctrl-btn:hover { color: var(--prog); transform: scale(1.05); }
 .ctrl-btn:active { transform: scale(0.95); }
-.ctrl-btn.play { width: 44px; height: 44px; background: var(--text); color: var(--bg); border-radius: 50%; }
+.ctrl-btn.play { width: 52px; height: 52px; background: var(--text); color: var(--bg); border-radius: 50%; }
 .ctrl-btn.play:hover { background: var(--prog); color: var(--bg); transform: scale(1.05); }
 .ctrl-btn.skip { color: var(--text); opacity: 0.8; }
 .ctrl-btn.skip:hover { opacity: 1; color: var(--text); }
 
-.ctrl-side { display: flex; gap: 16px; }
 .ctrl-btn.side { color: var(--text3); }
 .ctrl-btn.side:hover { color: var(--text); }
 .ctrl-btn.side.active { color: var(--prog); }
@@ -154,11 +202,12 @@ html, body {
 .vol-icon { color: var(--text3); display: flex; align-items: center; }
 input[type=range].vol {
   flex: 1; -webkit-appearance: none; height: 4px; border-radius: 2px; outline: none; cursor: pointer;
-  background: linear-gradient(to right, var(--prog) 0%, var(--prog) var(--vol-pct, 80%), var(--border) var(--vol-pct, 80%), var(--border) 100%);
+  background: linear-gradient(to right, var(--text2) 0%, var(--text2) var(--vol-pct, 80%), var(--border) var(--vol-pct, 80%), var(--border) 100%);
 }
 input[type=range].vol::-webkit-slider-thumb {
-  -webkit-appearance: none; width: 12px; height: 12px; border-radius: 50%; background: var(--prog); cursor: pointer;
+  -webkit-appearance: none; width: 12px; height: 12px; border-radius: 50%; background: var(--text); cursor: pointer;
 }
+.vol-pct { font-family: var(--mono); font-size: 11px; color: var(--text3); width: 28px; text-align: right; flex-shrink: 0; font-variant-numeric: tabular-nums; }
 
 /* ── PLAYLIST TABS ── */
 .pl-tabs { display: flex; gap: 16px; padding: 0 20px; overflow-x: auto; flex-shrink: 0; scrollbar-width: none; border-bottom: 1px solid var(--border); margin-bottom: 4px; }
@@ -168,7 +217,8 @@ input[type=range].vol::-webkit-slider-thumb {
   color: var(--text3); cursor: pointer; white-space: nowrap; flex-shrink: 0;
   border-bottom: 2px solid transparent; margin-bottom: -1px; transition: color 0.2s;
 }
-.pl-tab.active { color: var(--prog); border-bottom-color: var(--prog); }
+.pl-tab.active { color: var(--text); border-bottom-color: var(--prog); }
+.pl-tab .cnt { font-family: var(--mono); font-size: 10px; color: var(--text3); margin-left: 4px; }
 .pl-tab:hover:not(.active) { color: var(--text); }
 
 /* ── TRACK LIST ── */
@@ -181,16 +231,53 @@ input[type=range].vol::-webkit-slider-thumb {
 .track-item:hover { background: var(--card); }
 .track-item.playing { background: var(--active-tr); }
 .track-item.playing .t-title { color: var(--prog); }
-.t-num { width: 20px; font-size: 12px; color: var(--text3); text-align: center; flex-shrink: 0; font-variant-numeric: tabular-nums; }
+.t-num { width: 20px; font-size: 12px; color: var(--text3); text-align: center; flex-shrink: 0; font-variant-numeric: tabular-nums; display: flex; align-items: center; justify-content: center; }
 .t-num.arrow { color: var(--prog); font-size: 14px; }
-.t-thumb { width: 44px; height: 44px; border-radius: 4px; object-fit: cover; background: var(--border); flex-shrink: 0; }
+.eq { display: flex; align-items: flex-end; justify-content: center; gap: 2px; height: 12px; }
+.eq i { width: 2.5px; background: var(--prog); border-radius: 1px; height: 30%; animation: vu-bounce 1s ease-in-out infinite; }
+.eq i:nth-child(2) { animation-delay: 0.2s; }
+.eq i:nth-child(3) { animation-delay: 0.35s; }
+.eq.paused i { animation-play-state: paused; height: 60%; }
+.t-thumb { width: 44px; height: 44px; border-radius: 8px; object-fit: cover; background: var(--border); flex-shrink: 0; }
 .t-meta { flex: 1; overflow: hidden; }
 .t-title { font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
 .t-ch { font-size: 11px; color: var(--text2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 4px; }
+.t-dur { font-family: var(--mono); font-size: 11px; color: var(--text3); flex-shrink: 0; font-variant-numeric: tabular-nums; }
 .t-del { background: none; border: none; color: var(--text3); cursor: pointer; padding: 4px; flex-shrink: 0; opacity: 0; transition: all 0.2s; }
 .track-item:hover .t-del { opacity: 1; }
 .t-del:hover { color: #FA243C; }
 .track-empty { text-align: center; padding: 40px 20px; color: var(--text3); font-size: 13px; }
+
+/* ── LYRICS PREVIEW (썸네일 클릭 시 재생목록 자리에 표시) ── */
+body.lyrics-mode #pl-tabs,
+body.lyrics-mode #track-list,
+body.lyrics-mode #pl-actions { display: none; }
+.lyr-preview { display: none; width: 100%; flex: 1; flex-direction: column; align-items: center; justify-content: center; padding: 4px 0 12px; overflow: hidden; }
+body.lyrics-mode .lyr-preview { display: flex; }
+.lyr-preview-mask {
+  width: 100%; flex: 1; position: relative; overflow: hidden;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 16%, #000 84%, transparent 100%);
+  mask-image: linear-gradient(to bottom, transparent 0, #000 16%, #000 84%, transparent 100%);
+}
+.lyr-preview-list { position: absolute; left: 0; right: 0; top: 50%; padding: 0 24px; text-align: center; transition: transform 0.5s cubic-bezier(.22,.61,.36,1); }
+.lyr-p-line { font-size: 13px; font-weight: 600; color: var(--text3); line-height: 1; padding: 10px 0; transition: color 0.35s, font-size 0.35s, transform 0.35s; transform: scale(0.94); }
+.lyr-p-line.near { color: var(--text2); }
+.lyr-p-line.current { color: var(--prog); font-size: 16px; font-weight: 800; transform: scale(1); }
+.lyr-p-line.tap-sync { cursor: pointer; }
+.lyr-p-line.tap-sync:active { color: var(--prog); }
+.lyr-p-empty { font-size: 12px; color: var(--text3); text-align: center; line-height: 1.7; padding: 0 30px; }
+.lyr-p-empty button {
+  margin-top: 10px; background: transparent; border: 1px solid var(--border); color: var(--text);
+  font-size: 11px; font-weight: 700; padding: 7px 16px; border-radius: 999px; cursor: pointer; font-family: inherit;
+}
+.lyr-p-empty button:hover { border-color: var(--prog); color: var(--prog); }
+.lyr-preview-badge {
+  display: inline-flex; align-items: center; gap: 5px; font-size: 10px; font-weight: 700; color: var(--text3);
+  margin-top: 4px; flex-shrink: 0;
+}
+.lyr-preview-badge .dot { width: 5px; height: 5px; border-radius: 50%; background: var(--prog); }
+.lyr-reset-link { display: none; margin-left: 6px; text-decoration: underline; cursor: pointer; }
+.lyr-reset-link:hover { color: var(--text); }
 
 /* ── BOTTOM PLAYLIST ACTIONS ── */
 .pl-actions { display: flex; gap: 8px; align-items: center; padding: 12px 20px; background: var(--bg); border-top: 1px solid var(--border); flex-shrink: 0; }
@@ -208,7 +295,7 @@ input[type=range].vol::-webkit-slider-thumb {
 .search-empty { text-align: center; padding: 60px 20px; color: var(--text3); font-size: 13px; }
 .s-item { display: flex; align-items: center; gap: 12px; padding: 8px; border-radius: 8px; cursor: pointer; transition: background 0.2s; }
 .s-item:hover { background: var(--card); }
-.s-thumb { width: 64px; height: 44px; object-fit: cover; border-radius: 4px; background: var(--border); flex-shrink: 0; }
+.s-thumb { width: 64px; height: 44px; object-fit: cover; border-radius: 8px; background: var(--border); flex-shrink: 0; }
 .s-meta { flex: 1; overflow: hidden; }
 .s-title { font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
 .s-ch { font-size: 11px; color: var(--text2); margin-top: 4px; }
@@ -249,32 +336,33 @@ input[type=range].vol::-webkit-slider-thumb {
 }
 .nav-icon { display: flex; align-items: center; justify-content: center; }
 .nav-btn.active { color: var(--text); }
+.nav-btn.active .nav-icon { color: var(--prog); }
 .nav-btn:hover:not(.active) { color: var(--text2); }
 
 /* ── OVERLAYS & MODALS ── */
-.url-overlay, .settings-overlay, .modal-ov {
+.settings-overlay, .modal-ov {
   position: fixed; inset: 0; background: rgba(0,0,0,0.7); backdrop-filter: blur(4px); z-index: 200;
   display: none; align-items: center; justify-content: center;
 }
-.url-overlay.show, .settings-overlay.show, .modal-ov.show, .loading-ov.show { display: flex; }
+.settings-overlay.show, .modal-ov.show, .loading-ov.show { display: flex; }
 
-.url-box, .modal-card {
+.modal-card {
   background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 24px; width: 320px;
   box-shadow: 0 16px 40px rgba(0,0,0,0.5);
 }
-.url-box h3, .modal-card h3 { font-size: 15px; font-weight: 700; margin-bottom: 16px; color: var(--text); text-align: center; }
-.url-box input, .modal-card input {
+.modal-card h3 { font-size: 15px; font-weight: 700; margin-bottom: 16px; color: var(--text); text-align: center; }
+.modal-card input {
   width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
   padding: 10px 14px; font-size: 13px; color: var(--text); outline: none; margin-bottom: 20px;
   font-family: inherit; transition: border-color 0.2s;
 }
-.url-box input:focus, .modal-card input:focus { border-color: var(--prog); }
+.modal-card input:focus { border-color: var(--prog); }
 
-.url-box-btns, .modal-btns { display: flex; gap: 12px; justify-content: flex-end; }
-.url-box-btns button, .modal-btns button { padding: 8px 20px; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; border: none; font-family: inherit; transition: opacity 0.2s; }
-.url-box-btns button:hover, .modal-btns button:hover { opacity: 0.8; }
-.url-cancel, .m-cancel { background: transparent; color: var(--text); }
-.url-ok, .m-ok { background: var(--prog); color: #000; }
+.modal-btns { display: flex; gap: 12px; justify-content: flex-end; }
+.modal-btns button { padding: 8px 20px; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; border: none; font-family: inherit; transition: opacity 0.2s; }
+.modal-btns button:hover { opacity: 0.8; }
+.m-cancel { background: transparent; color: var(--text); }
+.m-ok { background: var(--prog); color: #000; }
 
 /* ── SETTINGS ── */
 .settings-overlay { z-index: 300; }
@@ -288,21 +376,27 @@ input[type=range].vol::-webkit-slider-thumb {
 }
 .settings-head h2 { font-size: 16px; font-weight: 700; color: var(--text); }
 .settings-close {
-  position: absolute; right: 16px; top: 20px;
-  background: none; border: none; color: var(--text2); cursor: pointer; display: flex; align-items: center; transition: color 0.2s;
+  position: absolute; right: 8px; top: 12px; padding: 8px; border-radius: 8px;
+  background: none; border: none; color: var(--text2); cursor: pointer; display: flex; align-items: center; transition: color 0.2s, background 0.2s;
 }
-.settings-close:hover { color: var(--text); }
+.settings-close:hover { background: var(--card); color: var(--text); }
 .settings-row {
   display: flex; align-items: center; gap: 16px;
   padding: 16px 20px; border-top: 1px solid var(--border);
 }
+.set-group-lab {
+  font-family: var(--mono); font-size: 10px; font-weight: 700; letter-spacing: 0.14em;
+  text-transform: uppercase; color: var(--prog); padding: 16px 20px 4px; border-top: 1px solid var(--border);
+}
+.set-group-lab:first-of-type { border-top: none; padding-top: 18px; }
+.set-group-lab + .settings-row { border-top: none; }
 .srow-icon {
   width: 36px; height: 36px; border-radius: 8px; background: var(--card); color: var(--text);
   display: flex; align-items: center; justify-content: center; flex-shrink: 0;
 }
-.srow-text { flex: 1; }
+.srow-text { flex: 1; min-width: 0; }
 .srow-label { font-size: 13px; font-weight: 600; color: var(--text); }
-.srow-sub { font-size: 11px; color: var(--text3); margin-top: 2px; }
+.srow-sub { font-size: 11px; color: var(--text3); margin-top: 3px; line-height: 1.5; word-break: keep-all; }
 .srow-ctrl select {
   background: var(--card); border: 1px solid var(--border); border-radius: 6px;
   padding: 8px 12px; font-size: 12px; color: var(--text); outline: none; cursor: pointer;
@@ -321,11 +415,11 @@ input[type=range].vol::-webkit-slider-thumb {
 .tog input:checked ~ .tog-thumb { transform: translateX(20px); }
 
 .settings-save {
-  margin: 16px 20px 20px; width: calc(100% - 40px); background: var(--text); color: #000;
+  margin: 16px 20px 20px; width: calc(100% - 40px); background: var(--prog); color: #fff;
   border: none; border-radius: 8px; padding: 12px; font-size: 14px; font-weight: 700;
-  cursor: pointer; font-family: inherit; transition: background 0.2s;
+  cursor: pointer; font-family: inherit; transition: opacity 0.2s;
 }
-.settings-save:hover { background: var(--prog); }
+.settings-save:hover { opacity: 0.88; }
 
 /* ── CONTEXT MENU ── */
 .ctx-menu {
@@ -335,12 +429,16 @@ input[type=range].vol::-webkit-slider-thumb {
 }
 .ctx-menu.show { display: block; }
 .ctx-item {
-  display: block; width: 100%; text-align: left; background: none; border: none;
+  display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; background: none; border: none;
   padding: 10px 16px; font-size: 13px; font-weight: 500; color: var(--text);
   cursor: pointer; font-family: inherit; white-space: nowrap; transition: background 0.2s;
 }
 .ctx-item:hover { background: var(--card); }
+.ctx-item .chev { margin-left: auto; color: var(--text3); }
 .ctx-del { color: #FA243C; }
+.ctx-back { color: var(--text3); border-bottom: 1px solid var(--border); }
+.ctx-back:hover { color: var(--text); }
+.ctx-pl-name { max-width: 160px; overflow: hidden; text-overflow: ellipsis; }
 
 /* ── TOAST ── */
 .toast {
@@ -360,36 +458,31 @@ input[type=range].vol::-webkit-slider-thumb {
 @keyframes spin { to { transform: rotate(360deg); } }
 .loading-ov span { font-size: 13px; color: var(--text); font-weight: 500; }
 
+/* ── READOUT (numeric / mono) TREATMENT ── */
+.time-row span, .t-num, .art-overlay span { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.srow-ctrl select { font-family: var(--mono); color: var(--readout); }
+
 /* ── WHITE THEME OVERRIDES ── */
-[data-theme="white"] .search-box { background: #ECEEF8; border-color: #D0D0E8; }
-[data-theme="white"] .search-box:focus-within { border-color: #6366F1; }
-[data-theme="white"] .url-box,
-[data-theme="white"] .modal-card { background: #FFFFFF; }
-[data-theme="white"] .url-box input,
-[data-theme="white"] .modal-card input { background: #ECEEF8; color: #0D0D1A; border-color: #D0D0E8; }
-[data-theme="white"] .settings-card { background: #FFFFFF; }
-[data-theme="white"] .srow-ctrl select { background: #ECEEF8; color: #0D0D1A; border-color: #D0D0E8; }
-[data-theme="white"] .ctx-menu { background: #FFFFFF; }
-[data-theme="white"] .ctx-item:hover { background: #ECEEF8; }
-[data-theme="white"] .bottom-nav { border-top-color: #D0D0E8; box-shadow: 0 -1px 8px rgba(99,102,241,0.08); }
-[data-theme="white"] .pl-actions { border-top-color: #D0D0E8; }
-[data-theme="white"] .toast { background: #0D0D1A; color: #FFFFFF; }
-[data-theme="white"] .ctrl-btn.play { background: #0D0D1A; color: #FFFFFF; }
-[data-theme="white"] .ctrl-btn.play:hover { background: #6366F1; }
-[data-theme="white"] .srow-icon { background: #ECEEF8; }
-[data-theme="white"] .settings-save { background: #0D0D1A; color: #FFFFFF; }
-[data-theme="white"] .settings-save:hover { background: #6366F1; color: #FFFFFF; }
+[data-theme="white"] .search-box { background: var(--card); border-color: var(--border); }
+[data-theme="white"] .search-box:focus-within { border-color: var(--prog); }
+[data-theme="white"] .modal-card { background: var(--panel); }
+[data-theme="white"] .modal-card input { background: var(--card); color: var(--text); border-color: var(--border); }
+[data-theme="white"] .settings-card { background: var(--panel); }
+[data-theme="white"] .srow-ctrl select { background: var(--card); border-color: var(--border); }
+[data-theme="white"] .ctx-menu { background: var(--panel); }
+[data-theme="white"] .ctx-item:hover { background: var(--card); }
+[data-theme="white"] .bottom-nav { border-top-color: var(--border); box-shadow: 0 -1px 8px rgba(232,73,42,0.10); }
+[data-theme="white"] .pl-actions { border-top-color: var(--border); }
+[data-theme="white"] .toast { background: var(--text); color: var(--bg); }
+[data-theme="white"] .srow-icon { background: var(--card); }
 </style>
 </head>
 <body>
 
 <div class="header">
-  <button class="add-url-btn" id="btn-add-url">
-    <span class="plus"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 12h8"/><path d="M12 8v8"/></svg></span>
-    <span class="label">Add URL</span>
-  </button>
   <div class="app-title">
-    <img src="../assets/logo.png" alt="K-Music" style="height:42px;width:auto;display:block;" />
+    <span class="brand-mark">K</span>
+    <span class="brand-word">Music <span class="sub">Player</span></span>
   </div>
   <div class="win-btns">
     <button class="win-btn" id="btn-pin" title="Always On Top"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16h14v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/></svg></button>
@@ -401,15 +494,30 @@ input[type=range].vol::-webkit-slider-thumb {
 <div class="search-wrap" id="home-search">
   <div class="search-box">
     <span class="icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg></span>
-    <input type="text" id="qs-input" placeholder="Search YouTube..."/>
+    <input type="text" id="qs-input" placeholder="Search YouTube or paste a URL..."/>
+    <span class="kbd" id="search-kbd">Ctrl+K</span>
   </div>
 </div>
 
 <div class="view active" id="view-home">
   <div class="player">
-    <img class="album-art" id="album-art" src="" alt="" onerror="this.src=''" style="background:var(--card)"/>
+    <div class="np-glow" id="np-glow"></div>
+    <div class="np-inner">
+    <div class="art-row">
+      <div class="art-seek" id="art-seek-fwd" title="5초 앞으로"></div>
+      <div class="art-wrap" id="art-wrap">
+        <img class="album-art default" id="album-art" src="data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==" alt="" onerror="this.src='data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw=='; this.classList.add('default')"/>
+        <div class="art-overlay"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><path d="M9 9l12-2"/><circle cx="6" cy="18" r="3"/></svg><span id="art-overlay-label">가사</span></div>
+        <div class="art-badge" id="art-badge">192k</div>
+      </div>
+      <div class="art-seek" id="art-seek-back" title="5초 뒤로"></div>
+    </div>
     <div class="track-title" id="track-title">재생 중인 곡 없음</div>
     <div class="track-channel" id="track-ch">—</div>
+
+    <div class="vu paused" id="vu">
+      <i style="animation-delay:0s"></i><i style="animation-delay:.15s"></i><i style="animation-delay:.3s"></i><i style="animation-delay:.1s"></i><i style="animation-delay:.4s"></i><i style="animation-delay:.25s"></i><i style="animation-delay:.05s"></i><i style="animation-delay:.35s"></i>
+    </div>
 
     <div class="progress-wrap">
       <div class="progress-bar" id="prog-bar"><div class="progress-fill" id="prog-fill"></div></div>
@@ -417,47 +525,50 @@ input[type=range].vol::-webkit-slider-thumb {
     </div>
 
     <div class="controls">
-      <div class="ctrl-center">
+        <button class="ctrl-btn side" id="btn-repeat" title="반복" style="position:relative">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/>
+            <polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>
+          </svg>
+          <span class="repeat-badge" style="display:none;position:absolute;top:-4px;right:-6px;width:14px;height:14px;border-radius:50%;background:var(--prog);color:#000;font-size:9px;font-weight:800;align-items:center;justify-content:center;">1</span>
+        </button>
         <button class="ctrl-btn skip" id="btn-prev" title="이전 곡">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z"/></svg>
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z"/></svg>
         </button>
         <button class="ctrl-btn play" id="btn-play">
           <svg id="icon-play" width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
           <svg id="icon-pause" width="24" height="24" viewBox="0 0 24 24" fill="currentColor" style="display:none"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
         </button>
         <button class="ctrl-btn skip" id="btn-next" title="다음 곡">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>
-        </button>
-      </div>
-      <div class="ctrl-side">
-        <button class="ctrl-btn side" id="btn-repeat" title="반복" style="position:relative">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/>
-            <polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>
-          </svg>
-          <span class="repeat-badge" style="display:none;position:absolute;top:-4px;right:-6px;width:14px;height:14px;border-radius:50%;background:var(--prog);color:#000;font-size:9px;font-weight:800;align-items:center;justify-content:center;">1</span>
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>
         </button>
         <button class="ctrl-btn side" id="btn-shuffle" title="셔플">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/>
             <polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/>
           </svg>
         </button>
-      </div>
     </div>
 
     <div class="vol-row">
       <span class="vol-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg></span>
       <input type="range" class="vol" id="vol" min="0" max="100" value="80"/>
+      <span class="vol-pct" id="vol-pct">80</span>
+    </div>
     </div>
   </div>
 
   <div class="pl-tabs" id="pl-tabs"></div>
   <div class="track-list" id="track-list"></div>
 
-  <div class="pl-actions">
+  <div class="pl-actions" id="pl-actions">
     <button class="pl-act-btn" id="btn-new-pl">Add Playlist</button>
     <button class="pl-act-btn" id="btn-rename-pl">Rename</button>
+  </div>
+
+  <div class="lyr-preview" id="lyr-preview">
+    <div class="lyr-preview-mask" id="lyr-preview-mask"><div class="lyr-preview-list" id="lyr-p-list"></div></div>
+    <div class="lyr-preview-badge" id="lyr-preview-badge"><span class="dot"></span><span id="lyr-preview-badge-text">가사 찾는 중...</span><span id="lyr-manual-sync-reset" class="lyr-reset-link">동기화 해제</span></div>
   </div>
 </div>
 
@@ -490,26 +601,16 @@ input[type=range].vol::-webkit-slider-thumb {
   </button>
 </div>
 
-<div class="url-overlay" id="url-overlay">
-  <div class="url-box">
-    <h3>YouTube URL 추가</h3>
-    <input type="text" id="url-input" placeholder="https://www.youtube.com/watch?v=..."/>
-    <div class="url-box-btns">
-      <button class="url-cancel" id="url-cancel">취소</button>
-      <button class="url-ok" id="url-ok">추가</button>
-    </div>
-  </div>
-</div>
-
 <div class="settings-overlay" id="settings-ov">
   <div class="settings-card">
     <div class="settings-head">
       <h2>설정</h2>
       <button class="settings-close" id="settings-close"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
     </div>
+    <div class="set-group-lab">오디오</div>
     <div class="settings-row">
       <div class="srow-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 14h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7a9 9 0 0 1 18 0v7a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3"/></svg></div>
-      <div class="srow-text"><div class="srow-label">음질 설정</div></div>
+      <div class="srow-text"><div class="srow-label">음질 설정</div><div class="srow-sub">스트리밍 비트레이트 · 128/192/320k</div></div>
       <div class="srow-ctrl">
         <select id="cfg-quality">
           <option value="128">128k</option>
@@ -518,16 +619,7 @@ input[type=range].vol::-webkit-slider-thumb {
         </select>
       </div>
     </div>
-    <div class="settings-row">
-      <div class="srow-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3m0 14v3M4.22 4.22l2.12 2.12m11.32 11.32 2.12 2.12M2 12h3m14 0h3M4.22 19.78l2.12-2.12M17.66 6.34l2.12-2.12"/></svg></div>
-      <div class="srow-text"><div class="srow-label">스킨</div></div>
-      <div class="srow-ctrl">
-        <select id="cfg-theme">
-          <option value="default">기본 (앰버 골드)</option>
-          <option value="white">라이트 화이트</option>
-        </select>
-      </div>
-    </div>
+    <div class="set-group-lab">재생</div>
     <div class="settings-row">
       <div class="srow-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 3 20 12 6 21 6 3"/></svg></div>
       <div class="srow-text"><div class="srow-label">자동 재생</div><div class="srow-sub" id="auto-sub">꺼짐</div></div>
@@ -545,6 +637,17 @@ input[type=range].vol::-webkit-slider-thumb {
         <div class="tog-track"></div>
         <div class="tog-thumb"></div>
       </label>
+    </div>
+    <div class="set-group-lab">시스템</div>
+    <div class="settings-row">
+      <div class="srow-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3m0 14v3M4.22 4.22l2.12 2.12m11.32 11.32 2.12 2.12M2 12h3m14 0h3M4.22 19.78l2.12-2.12M17.66 6.34l2.12-2.12"/></svg></div>
+      <div class="srow-text"><div class="srow-label">스킨</div><div class="srow-sub">그래파이트 다크 / 페이퍼 라이트</div></div>
+      <div class="srow-ctrl">
+        <select id="cfg-theme">
+          <option value="default">기본 (그래파이트)</option>
+          <option value="white">라이트 (페이퍼)</option>
+        </select>
+      </div>
     </div>
     <div class="settings-row">
       <div class="srow-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/></svg></div>
@@ -590,9 +693,16 @@ input[type=range].vol::-webkit-slider-thumb {
 </div>
 
 <div class="ctx-menu" id="ctx-menu">
-  <button class="ctx-item ctx-del" id="ctx-del">
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: middle; margin-right: 6px;"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>삭제
-  </button>
+  <div id="ctx-main">
+    <button class="ctx-item" id="ctx-move">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>다른 플레이리스트로 이동
+      <svg class="chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+    </button>
+    <button class="ctx-item ctx-del" id="ctx-del">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>삭제
+    </button>
+  </div>
+  <div id="ctx-move-list" style="display:none"></div>
 </div>
 
 <div class="toast" id="toast"></div>

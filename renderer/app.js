@@ -1,5 +1,7 @@
 'use strict';
 
+const BLANK_PX = 'data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==';
+
 // ── state ─────────────────────────────────────────────────────────────────────
 let playlists = [];
 let currentPl = 0;
@@ -9,6 +11,13 @@ let repeatMode = 0;  // 0=off 1=all 2=one
 let shuffle = false;
 let config = {};
 let streamCache = {};  // ytUrl -> { url, expireTs }
+
+let inLyrics = false;
+let lyricsState = null;   // { found, synced(parsed lines[] or null), plain, artist, title, ytUrl }
+let lyricsForYtUrl = null; // 어느 트랙에 대한 lyricsState인지
+let curLineIdx = -1;
+let plainScrollOverride = false; // 텍스트전용 모드에서 형이 직접 휠로 스크롤하면 자동 진행률 스크롤을 멈춤
+let plainScrollOffsetPx = 0;
 
 const audio = document.getElementById('audio');
 
@@ -27,6 +36,17 @@ const plTabs     = $('pl-tabs');
 const trackList  = $('track-list');
 const loading    = $('loading');
 const toastEl    = $('toast');
+const artWrap    = $('art-wrap');
+const artSeekFwd = $('art-seek-fwd');
+const artSeekBack= $('art-seek-back');
+const lyrPList   = $('lyr-p-list');
+const lyrBadgeTx = $('lyr-preview-badge-text');
+const lyrMask    = $('lyr-preview-mask');
+const lyrResetLink = $('lyr-manual-sync-reset');
+const volPct     = $('vol-pct');
+const vuMeter    = $('vu');
+const artBadge   = $('art-badge');
+const playerEl   = document.querySelector('.player');
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 function fmt(s) {
@@ -44,6 +64,35 @@ function toast(msg) {
 }
 function showLoad(msg='처리 중...') { $('loading-text').textContent = msg; loading.classList.add('show'); }
 function hideLoad() { loading.classList.remove('show'); }
+
+function updateQualityBadge() { artBadge.textContent = `${config.quality || '192'}k`; }
+
+// 앨범아트 색을 뽑아서 now-playing 배경에 은은한 글로우로 반영 — 썸네일 CDN이 CORS를 안 열어주면
+// 캔버스가 tainted 상태가 돼서 getImageData가 예외를 던짐. 그 경우 그냥 글로우 없이 기본색(--prog)으로 폴백.
+async function updateGlowFromArt(src) {
+  if (!src) { playerEl.style.removeProperty('--glow'); return; }
+  try {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    const loaded = new Promise((res, rej) => { img.onload = res; img.onerror = rej; });
+    img.src = src;
+    await loaded;
+    const canvas = document.createElement('canvas');
+    canvas.width = 16; canvas.height = 16;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(img, 0, 0, 16, 16);
+    const data = ctx.getImageData(0, 0, 16, 16).data;
+    let r = 0, g = 0, b = 0, n = 0;
+    for (let i = 0; i < data.length; i += 4) {
+      const rr = data[i], gg = data[i+1], bb = data[i+2];
+      const lum = (rr + gg + bb) / 3;
+      if (lum < 20 || lum > 240) continue; // 거의 검정/흰색 픽셀은 글로우색으로 부적합해서 제외
+      r += rr; g += gg; b += bb; n++;
+    }
+    if (!n) { playerEl.style.removeProperty('--glow'); return; }
+    playerEl.style.setProperty('--glow', `rgb(${Math.round(r/n)},${Math.round(g/n)},${Math.round(b/n)})`);
+  } catch { playerEl.style.removeProperty('--glow'); }
+}
 
 // modal
 let _modalRes = null;
@@ -123,17 +172,11 @@ $('settings-save').onclick = async () => {
     alwaysOnTop: config.alwaysOnTop
   });
   applyTheme(theme);
+  updateQualityBadge();
   await window.api.setLoginItem($('cfg-startup').checked);
   closeSettings();
   toast('설정 저장됨');
 };
-
-// ── add URL overlay ───────────────────────────────────────────────────────────
-$('btn-add-url').onclick = () => { $('url-overlay').classList.add('show'); $('url-input').focus(); };
-$('url-cancel').onclick = () => { $('url-overlay').classList.remove('show'); $('url-input').value=''; };
-$('url-overlay').addEventListener('click', e => { if(e.target===$('url-overlay')) { $('url-overlay').classList.remove('show'); $('url-input').value=''; } });
-$('url-ok').onclick = () => { addByUrl($('url-input').value); $('url-input').value=''; $('url-overlay').classList.remove('show'); };
-$('url-input').onkeydown = e => { if(e.key==='Enter') { addByUrl($('url-input').value); $('url-input').value=''; $('url-overlay').classList.remove('show'); } if(e.key==='Escape') { $('url-overlay').classList.remove('show'); } };
 
 // ── render ────────────────────────────────────────────────────────────────────
 function renderTabs() {
@@ -141,7 +184,7 @@ function renderTabs() {
   playlists.forEach((pl, i) => {
     const t = document.createElement('button');
     t.className = 'pl-tab' + (i===currentPl?' active':'');
-    t.textContent = pl.name;
+    t.innerHTML = `${esc(pl.name)} <span class="cnt">${pl.tracks.length}</span>`;
     t.onclick = () => { currentPl=i; renderTabs(); renderTrackList(); };
     plTabs.appendChild(t);
   });
@@ -150,18 +193,22 @@ function renderTabs() {
 function renderTrackList() {
   const tracks = playlists[currentPl]?.tracks || [];
   if (!tracks.length) {
-    trackList.innerHTML = '<div class="track-empty">이 플레이리스트에 곡이 없습니다.<br>⊕ Add URL 또는 Search로 추가하세요.</div>';
+    trackList.innerHTML = '<div class="track-empty">이 플레이리스트에 곡이 없습니다.<br>검색창에 검색어나 유튜브 URL을 넣어 추가하세요.</div>';
     return;
   }
   trackList.innerHTML = '';
   tracks.forEach((t, i) => {
     const playing = (i===currentTrack);
+    const numHtml = playing
+      ? `<span class="eq ${isPlaying?'':'paused'}"><i></i><i></i><i></i></span>`
+      : (i+1);
     const el = document.createElement('div');
     el.className = 'track-item' + (playing?' playing':'');
     el.innerHTML = `
-      <span class="t-num ${playing?'arrow':''}">${playing?'⇒':(i+1)}</span>
+      <span class="t-num">${numHtml}</span>
       <img class="t-thumb" src="${esc(t.thumbnail||'')}" onerror="this.style.visibility='hidden'" alt=""/>
       <div class="t-meta"><div class="t-title">${esc(t.title)}</div><div class="t-ch">${esc(t.channel)}</div></div>
+      <span class="t-dur">${fmt(t.duration)}</span>
       <button class="t-del" data-i="${i}">🗑</button>
     `;
     el.querySelector('.t-del').onclick = e => { e.stopPropagation(); removeTrack(i); };
@@ -212,16 +259,19 @@ function renderPlView() {
 }
 
 // ── add track ─────────────────────────────────────────────────────────────────
-async function addByUrl(url) {
+function looksLikeUrl(s) { return /^https?:\/\//i.test(s); }
+
+async function addByUrl(url, autoplay=false) {
   url = url.trim();
-  if (!url || !url.startsWith('http')) { toast('올바른 YouTube URL을 입력하세요'); return; }
+  if (!url || !looksLikeUrl(url)) { toast('올바른 YouTube URL을 입력하세요'); return; }
   showLoad('곡 정보 가져오는 중...');
   try {
     const info = await window.api.getVideoInfo(url);
     if (info.error) { toast('오류: '+info.error); return; }
     playlists[currentPl].tracks.push({ytUrl:url, title:info.title, channel:info.channel, thumbnail:info.thumbnail, duration:info.duration});
     await save(); renderTrackList();
-    toast(`"${info.title.slice(0,20)}..." 추가됨`);
+    if (autoplay) { switchView('home'); playTrack(playlists[currentPl].tracks.length-1); }
+    else toast(`"${info.title.slice(0,20)}..." 추가됨`);
   } catch(e) { toast('추가 실패: '+e.message); } finally { hideLoad(); }
 }
 
@@ -236,13 +286,18 @@ function removeTrack(i) {
 function setPlayIcon(playing) {
   document.getElementById('icon-play').style.display = playing ? 'none' : '';
   document.getElementById('icon-pause').style.display = playing ? '' : 'none';
+  vuMeter.classList.toggle('paused', !playing);
 }
 
 function stopAudio() {
   audio.pause(); audio.src='';
   isPlaying=false; setPlayIcon(false);
   progFill.style.width='0%'; tCur.textContent='0:00';
-  albumArt.src=''; trackTitle.textContent='재생 중인 곡 없음'; trackCh.textContent='—';
+  albumArt.src=BLANK_PX; albumArt.classList.add('default'); trackTitle.textContent='재생 중인 곡 없음'; trackCh.textContent='—';
+  lyricsState = null; lyricsForYtUrl = null; curLineIdx = -1;
+  plainScrollOverride = false; plainScrollOffsetPx = 0;
+  updateGlowFromArt(null);
+  if (inLyrics) renderLyricsPreview();
 }
 
 async function playTrack(idx) {
@@ -253,7 +308,9 @@ async function playTrack(idx) {
   const t = tracks[idx];
   trackTitle.textContent = t.title;
   trackCh.textContent = t.channel;
-  albumArt.src = t.thumbnail||'';
+  albumArt.src = t.thumbnail||BLANK_PX;
+  albumArt.classList.toggle('default', !t.thumbnail);
+  updateGlowFromArt(t.thumbnail||'');
   tTot.textContent = fmt(t.duration);
   renderTrackList();
   showLoad('스트리밍 로딩 중...');
@@ -264,12 +321,223 @@ async function playTrack(idx) {
     await audio.play();
     isPlaying=true; setPlayIcon(true);
     await saveCfg({lastPlId: playlists[currentPl].id, lastTrackIdx: idx});
+    if (inLyrics) ensureLyricsLoaded();
   } catch(e) {
     toast('재생 실패: '+e.message);
     isPlaying=false; setPlayIcon(false);
     currentTrack = prev;
   } finally { hideLoad(); renderTrackList(); }
 }
+
+// ── 가사 ──────────────────────────────────────────────────────────────────────
+function parseLRC(lrc) {
+  if (!lrc) return [];
+  const lines = [];
+  for (const raw of lrc.split('\n')) {
+    const m = raw.match(/^\[(\d+):(\d+(?:\.\d+)?)\](.*)$/);
+    if (!m) continue;
+    const time = parseInt(m[1], 10) * 60 + parseFloat(m[2]);
+    const text = m[3].trim();
+    if (text) lines.push({ time, text });
+  }
+  return lines.sort((a, b) => a.time - b.time);
+}
+
+// lrclib 데이터 중 "앞 몇 줄만 타임스탬프 있고 나머지는 평문"인 불완전 항목이 섞여있어서,
+// 곡 길이 대비 타임스탬프 커버리지가 너무 부실하면 동기화를 포기하고 일반 가사로 취급한다
+// (그대로 쓰면 곡 중반부터 화면이 멈춘 것처럼 보임 — 2026-07-19 한로로 곡에서 발견).
+function parseLRCReliable(lrc, durationSec) {
+  const lines = parseLRC(lrc);
+  if (lines.length < 3) return [];
+  if (durationSec) {
+    const coverage = lines[lines.length - 1].time / durationSec;
+    if (coverage < 0.5) return [];
+  }
+  return lines;
+}
+
+function renderLyricsPreview() {
+  // 직전 곡이 동기화/텍스트 모드였다면 top/transform에 그 곡 기준 스크롤 위치(예: 큰 음수 translateY)가
+  // 남아있음 — "찾는 중"/"가사 없음" 같은 짧은 안내문은 그 위치를 그대로 물려받으면 화면 밖으로
+  // 밀려나서 안 보이게 됨(2026-07-20, 박효신 곡에서 "직접 검색하기" 버튼이 안 보이던 원인).
+  lyrPList.style.top = '50%';
+  lyrPList.style.transform = 'translateY(-50%)';
+  lyrResetLink.style.display = 'none';
+  if (!lyricsState) {
+    lyrPList.innerHTML = '<div class="lyr-p-empty">가사 찾는 중...</div>';
+    lyrBadgeTx.textContent = '가사 찾는 중...';
+    return;
+  }
+  if (!lyricsState.found) {
+    lyrPList.innerHTML = `<div class="lyr-p-empty">이 곡은 가사를 찾을 수 없어요.<br>아티스트/제목을 직접 입력해서 다시 찾아볼 수 있어요.<br><button id="lyr-research-btn">직접 검색하기</button></div>`;
+    lyrBadgeTx.textContent = '가사 없음';
+    $('lyr-research-btn')?.addEventListener('click', manualLyricsSearch);
+    return;
+  }
+  if (lyricsState.syncedLines && lyricsState.syncedLines.length) {
+    lyrBadgeTx.textContent = lyricsState.manualSync ? '동기화됨 (직접 설정)' : '동기화됨';
+    lyrResetLink.style.display = lyricsState.manualSync ? 'inline' : 'none';
+    lyrPList.style.top = '50%';
+    lyrPList.innerHTML = lyricsState.syncedLines.map((l, i) => `<div class="lyr-p-line" data-i="${i}">${esc(l.text)}</div>`).join('');
+    updateLyricsHighlight(true);
+  } else {
+    lyrResetLink.style.display = 'none';
+    lyrBadgeTx.textContent = '가사 (텍스트만) · 줄을 탭하면 그 지점부터 동기화, 휠로 스크롤 가능';
+    // 동기화 정보가 없으니 시간 기준 스크롤이 불가능함 — 가사 전체 블록을 세로 중앙(-50%)에 맞추면
+    // 긴 가사일수록 화면엔 중간 아무 구간이나 걸려서 곡 시작과 무관한 부분이 보이는 버그가 있었음(2026-07-19).
+    // 그래서 첫 줄부터 보이도록 컨테이너 맨 위에 붙인다.
+    lyrPList.style.top = '0';
+    const plainLines = (lyricsState.plain || '가사 내용이 비어있어요').split('\n').filter(Boolean);
+    lyrPList.innerHTML = plainLines.map((l, i) => `<div class="lyr-p-line near tap-sync" data-i="${i}" style="transform:scale(1)">${esc(l)}</div>`).join('');
+    lyrPList.style.transform = 'translateY(0)';
+    lyrPList.querySelectorAll('.tap-sync').forEach(el => {
+      el.addEventListener('click', () => applyManualSync(parseInt(el.dataset.i, 10), plainLines));
+    });
+    updatePlainLyricsScroll();
+  }
+}
+
+// lrclib에 동기화 데이터가 아예 없는 곡(예: 김범수 "끝사랑")에서, 형이 지금 나오고 있는 줄을
+// 직접 탭하면 그 시점을 기준으로 앞뒤 줄들을 남은/지난 재생시간에 균등 배분해서 "직접 만든 동기화"를
+// 만들어줌. 다음에 같은 곡 틀 때도 자동으로 이 타이밍을 재사용하도록 저장까지 함(2026-07-20).
+function applyManualSync(idx, plainLines) {
+  const dur = audio.duration || 0;
+  const total = plainLines.length;
+  if (!dur || !total) return;
+  const anchorTime = audio.currentTime || 0;
+  const gapAfter = idx < total - 1 ? (dur - anchorTime) / (total - 1 - idx) : 0;
+  const gapBefore = idx > 0 ? anchorTime / idx : 0;
+  const syncLines = plainLines.map((text, i) => {
+    let time;
+    if (i === idx) time = anchorTime;
+    else if (i < idx) time = anchorTime - (idx - i) * gapBefore;
+    else time = anchorTime + (i - idx) * gapAfter;
+    return { time: Math.max(0, time), text };
+  });
+  lyricsState.syncedLines = syncLines;
+  lyricsState.manualSync = true;
+  curLineIdx = -1;
+  renderLyricsPreview();
+  if (lyricsForYtUrl) window.api.saveManualSync(lyricsForYtUrl, syncLines);
+  toast('이 지점부터 동기화됐어요');
+}
+
+// 타임스탬프가 없는 텍스트 전용 가사는 정확한 줄 동기화가 불가능하니, 최소한
+// "재생 진행률 = 가사 스크롤 진행률"로 맞춰서 곡이 끝나갈 때 가사도 끝부분에 가 있도록 함
+// (형이 "텍스트만 모드라도 넘어가기는 해야 될거 아냐"라고 지적해서 추가, 2026-07-20).
+function updatePlainLyricsScroll() {
+  if (!inLyrics || !lyricsState?.found || lyricsState.syncedLines?.length || !lyricsState.plain) return;
+  // 형이 실제로 부르는 줄을 찾아서 탭하려는 도중에 자동 스크롤이 계속 밀고 나가서
+  // 원하는 줄을 못 맞추는 문제가 있었음(2026-07-20) — 휠로 직접 스크롤을 시작하면
+  // 그 다음부턴 자동 진행률 스크롤을 멈추고 형이 맞춰놓은 위치를 그대로 둔다.
+  if (plainScrollOverride) return;
+  const dur = audio.duration || 0;
+  if (!dur) return;
+  const maxScroll = lyrPList.scrollHeight - lyrMask.clientHeight;
+  if (maxScroll <= 0) return;
+  const progress = Math.min(1, Math.max(0, audio.currentTime / dur));
+  lyrPList.style.transform = `translateY(${-progress * maxScroll}px)`;
+}
+
+lyrMask.addEventListener('wheel', (e) => {
+  if (!inLyrics || !lyricsState?.found || lyricsState.syncedLines?.length || !lyricsState.plain) return;
+  e.preventDefault();
+  const maxScroll = lyrPList.scrollHeight - lyrMask.clientHeight;
+  if (maxScroll <= 0) return;
+  if (!plainScrollOverride) {
+    plainScrollOverride = true;
+    // 현재 자동 스크롤 위치를 그대로 이어받아서 시작(갑자기 튀지 않게)
+    const m = /translateY\((-?[\d.]+)px\)/.exec(lyrPList.style.transform);
+    plainScrollOffsetPx = m ? parseFloat(m[1]) : 0;
+  }
+  plainScrollOffsetPx = Math.min(0, Math.max(-maxScroll, plainScrollOffsetPx - e.deltaY * 0.6));
+  lyrPList.style.transform = `translateY(${plainScrollOffsetPx}px)`;
+}, { passive: false });
+
+lyrResetLink.addEventListener('click', (e) => {
+  e.stopPropagation();
+  if (!lyricsState?.manualSync) return;
+  lyricsState.syncedLines = [];
+  lyricsState.manualSync = false;
+  curLineIdx = -1;
+  plainScrollOverride = false;
+  plainScrollOffsetPx = 0;
+  renderLyricsPreview();
+  if (lyricsForYtUrl) window.api.saveManualSync(lyricsForYtUrl, []);
+  toast('동기화 해제됨');
+});
+
+function updateLyricsHighlight(force) {
+  if (!inLyrics || !lyricsState?.syncedLines?.length) return;
+  const t = audio.currentTime || 0;
+  const lines = lyricsState.syncedLines;
+  let idx = 0;
+  for (let i = 0; i < lines.length; i++) { if (lines[i].time <= t) idx = i; else break; }
+  if (idx === curLineIdx && !force) return;
+  curLineIdx = idx;
+  const els = lyrPList.querySelectorAll('.lyr-p-line');
+  els.forEach((el, i) => {
+    el.classList.remove('current', 'near');
+    if (i === idx) el.classList.add('current');
+    else if (Math.abs(i - idx) === 1) el.classList.add('near');
+  });
+  // top:50%로 리스트 맨 위를 컨테이너 중앙에 놓은 상태이므로, 현재 줄(idx)의 "중심"을
+  // 그 중앙에 맞추려면 (idx*줄높이 + 줄높이/2)만큼만 위로 밀면 됨.
+  // 여기서 -50%를 쓰면 CSS 규칙상 "리스트 자기 자신의 전체 높이의 50%"로 계산돼서
+  // 곡 전체 줄 수와 무관하게 항상 "리스트 한가운데 줄"이 화면에 걸리는 버그가 있었음
+  // (2026-07-19 빅뱅/한로로 곡에서 재발견 — 짧은 4~5줄 미리보기로만 테스트할 땐 안 드러났음).
+  lyrPList.style.transform = `translateY(calc(-16.5px - ${idx * 33}px))`;
+}
+
+async function ensureLyricsLoaded() {
+  const t = playlists[currentPl]?.tracks?.[currentTrack];
+  if (!t) { lyricsState = { found: false }; renderLyricsPreview(); return; }
+  if (lyricsForYtUrl === t.ytUrl && lyricsState) { renderLyricsPreview(); return; }
+  lyricsState = null; curLineIdx = -1;
+  plainScrollOverride = false; plainScrollOffsetPx = 0;
+  renderLyricsPreview();
+  const res = await window.api.getLyrics(t.ytUrl, t.title, t.channel, t.duration);
+  if (playlists[currentPl]?.tracks?.[currentTrack]?.ytUrl !== t.ytUrl) return; // 그 사이 곡이 바뀜
+  lyricsForYtUrl = t.ytUrl;
+  const lrcLines = res.found ? parseLRCReliable(res.synced, t.duration) : [];
+  const manualLines = res.manualSyncLines || [];
+  const syncedLines = lrcLines.length ? lrcLines : manualLines;
+  lyricsState = { ...res, syncedLines, manualSync: !lrcLines.length && manualLines.length > 0 };
+  renderLyricsPreview();
+}
+
+async function manualLyricsSearch() {
+  const t = playlists[currentPl]?.tracks?.[currentTrack];
+  if (!t) return;
+  const artist = await openModal('아티스트명 입력', lyricsState?.artist || '');
+  if (artist === null) return;
+  const title = await openModal('곡 제목 입력', lyricsState?.title || t.title);
+  if (title === null) return;
+  lyrPList.style.top = '50%';
+  lyrPList.style.transform = 'translateY(-50%)';
+  lyrPList.innerHTML = '<div class="lyr-p-empty">검색 중...</div>';
+  const res = await window.api.searchLyricsManual(t.ytUrl, artist, title, t.duration);
+  lyricsForYtUrl = t.ytUrl;
+  lyricsState = { ...res, syncedLines: res.found ? parseLRCReliable(res.synced, t.duration) : [] };
+  curLineIdx = -1;
+  renderLyricsPreview();
+}
+
+function toggleLyrics() {
+  inLyrics = !inLyrics;
+  document.body.classList.toggle('lyrics-mode', inLyrics);
+  if (inLyrics) ensureLyricsLoaded();
+}
+artWrap.addEventListener('click', toggleLyrics);
+
+// 앨범아트 양옆 빈 공간 탭으로 5초 앞/뒤 이동 (형이 "노래 빨리 넘기는 기능 없다"고 요청, 2026-07-20)
+function seekBy(sec) {
+  if (!audio.duration) return;
+  audio.currentTime = Math.min(audio.duration, Math.max(0, audio.currentTime + sec));
+}
+// 형이 실제로 써보니 방향이 반대로 느껴진다고 해서 좌/우 동작을 스왑함(2026-07-20).
+artSeekFwd.addEventListener('click', () => seekBy(-5));
+artSeekBack.addEventListener('click', () => seekBy(5));
 
 function togglePlay() {
   if (!audio.src) {
@@ -303,6 +571,7 @@ audio.ontimeupdate = () => {
   if (!audio.duration) return;
   progFill.style.width = (audio.currentTime/audio.duration*100)+'%';
   tCur.textContent = fmt(audio.currentTime);
+  if (inLyrics) { updateLyricsHighlight(); updatePlainLyricsScroll(); }
 };
 audio.onended = () => {
   if (repeatMode===2) { audio.currentTime=0; audio.play(); return; }
@@ -331,23 +600,29 @@ $('btn-shuffle').onclick = function() {
   shuffle=!shuffle; this.classList.toggle('active', shuffle);
   toast(shuffle?'셔플 켜짐':'셔플 꺼짐');
 };
-function updateVolSlider() { volSlider.style.setProperty('--vol-pct', volSlider.value + '%'); }
+function updateVolSlider() { volSlider.style.setProperty('--vol-pct', volSlider.value + '%'); volPct.textContent = volSlider.value; }
 volSlider.oninput = function() { audio.volume=this.value/100; updateVolSlider(); };
 volSlider.onchange = function() { saveCfg({volume:parseInt(this.value)}); };
 
 // ── search ────────────────────────────────────────────────────────────────────
+document.addEventListener('keydown', e => {
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase()==='k') { e.preventDefault(); $('qs-input').focus(); $('qs-input').select(); }
+});
 let _searchTimer = null;
 $('qs-input').addEventListener('keydown', e => {
   if (e.key==='Enter') {
     clearTimeout(_searchTimer);
-    doSearch($('qs-input').value.trim());
+    const q = $('qs-input').value.trim();
+    if (looksLikeUrl(q)) { addByUrl(q, true); $('qs-input').value=''; return; }
+    doSearch(q);
     if (curView==='home') switchView('search');
   }
 });
 $('qs-input').addEventListener('input', () => {
   clearTimeout(_searchTimer);
+  const q = $('qs-input').value.trim();
+  if (looksLikeUrl(q)) return; // URL 입력 중엔 자동검색 생략, Enter로 추가+재생
   _searchTimer = setTimeout(() => {
-    const q = $('qs-input').value.trim();
     if (q.length>2) { doSearch(q); if(curView==='home') switchView('search'); }
   }, 700);
 });
@@ -402,14 +677,19 @@ $('btn-rename-pl').onclick = async () => {
 // ── context menu ─────────────────────────────────────────────────────────────
 let _ctxIdx = -1;
 const ctxMenu = $('ctx-menu');
-function hideCtx() { ctxMenu.classList.remove('show'); }
+const ctxMain = $('ctx-main');
+const ctxMoveList = $('ctx-move-list');
+function showCtxMain() { ctxMain.style.display = ''; ctxMoveList.style.display = 'none'; }
+function hideCtx() { ctxMenu.classList.remove('show'); showCtxMain(); }
 document.addEventListener('click', hideCtx);
 document.addEventListener('contextmenu', hideCtx);
 
 function showCtxMenu(e, idx) {
   e.preventDefault(); e.stopPropagation();
   _ctxIdx = idx;
-  ctxMenu.style.left = Math.min(e.clientX, 400 - 120) + 'px';
+  showCtxMain();
+  $('ctx-move').style.display = playlists.length > 1 ? '' : 'none';
+  ctxMenu.style.left = Math.min(e.clientX, 400 - 220) + 'px';
   ctxMenu.style.top  = Math.min(e.clientY, 680 - 60) + 'px';
   ctxMenu.classList.add('show');
 }
@@ -417,6 +697,34 @@ $('ctx-del').onclick = (e) => {
   e.stopPropagation();
   hideCtx();
   if (_ctxIdx >= 0) removeTrack(_ctxIdx);
+};
+
+function moveTrackToPlaylist(idx, targetPlIdx) {
+  const track = playlists[currentPl].tracks.splice(idx, 1)[0];
+  if (!track) return;
+  playlists[targetPlIdx].tracks.push(track);
+  if (currentTrack === idx) { currentTrack = -1; stopAudio(); }
+  else if (currentTrack > idx) currentTrack--;
+  save(); renderTrackList(); renderTabs();
+  toast(`"${track.title.slice(0,20)}..." → "${playlists[targetPlIdx].name}"로 이동됨`);
+}
+
+$('ctx-move').onclick = (e) => {
+  e.stopPropagation();
+  ctxMoveList.innerHTML = `
+    <button class="ctx-item ctx-back" id="ctx-back"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>뒤로</button>
+    ${playlists.map((pl, i) => i===currentPl ? '' : `<button class="ctx-item ctx-pl-opt" data-i="${i}"><span class="ctx-pl-name">${esc(pl.name)}</span></button>`).join('')}
+  `;
+  ctxMain.style.display = 'none';
+  ctxMoveList.style.display = '';
+  ctxMoveList.querySelectorAll('.ctx-pl-opt').forEach(btn => {
+    btn.onclick = (ev) => {
+      ev.stopPropagation();
+      hideCtx();
+      if (_ctxIdx >= 0) moveTrackToPlaylist(_ctxIdx, parseInt(btn.dataset.i, 10));
+    };
+  });
+  $('ctx-back').onclick = (ev) => { ev.stopPropagation(); showCtxMain(); };
 };
 
 // ── about overlay ─────────────────────────────────────────────────────────────
@@ -455,6 +763,7 @@ $('btn-pin').onclick = async function() {
   playlists = await window.api.getPlaylists();
   if (!playlists?.length) playlists=[{id:uid(),name:'My Playlist',tracks:[]}];
   applyTheme(config.theme);
+  updateQualityBadge();
   volSlider.value = config.volume??80;
   audio.volume = volSlider.value/100;
   updateVolSlider();
