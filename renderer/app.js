@@ -731,9 +731,35 @@ $('ctx-move').onclick = (e) => {
 $('about-close').onclick = () => $('about-ov').classList.remove('show');
 $('about-ov').addEventListener('click', e => { if(e.target===$('about-ov')) $('about-ov').classList.remove('show'); });
 
+window.api.getAppVersion().then(v => { $('about-version').textContent = `버전 ${v}`; });
+
+$('about-check-update').onclick = () => {
+  $('about-check-update').disabled = true;
+  $('about-update-status').textContent = '확인 중...';
+  window.api.checkForUpdates().then(res => {
+    if (res === 'dev') {
+      $('about-check-update').disabled = false;
+      $('about-update-status').textContent = '개발 모드에서는 확인할 수 없어요.';
+    }
+  });
+};
+
 // ── auto-update ───────────────────────────────────────────────────────────────
-window.api.onUpdateAvailable(() => toast('업데이트가 있어요. 다운로드 중...'));
+window.api.onUpdateAvailable(() => {
+  toast('업데이트가 있어요. 다운로드 중...');
+  $('about-check-update').disabled = false;
+  $('about-update-status').textContent = '새 버전 발견, 다운로드 중...';
+});
+window.api.onUpdateNotAvailable(() => {
+  $('about-check-update').disabled = false;
+  $('about-update-status').textContent = '최신 버전 사용 중입니다.';
+});
+window.api.onUpdateError(() => {
+  $('about-check-update').disabled = false;
+  $('about-update-status').textContent = '업데이트 확인 실패, 잠시 후 다시 시도해주세요.';
+});
 window.api.onUpdateDownloaded(() => {
+  $('about-update-status').textContent = '다운로드 완료! 재시작하면 설치돼요.';
   const ok = confirm('업데이트 다운로드 완료! 지금 재시작하여 설치할까요?');
   if (ok) window.api.installUpdate();
 });

@@ -24,7 +24,11 @@ contextBridge.exposeInMainWorld('api', {
   onSettingsClosed: (cb) => ipcRenderer.on('settings-closed', cb),
   onUpdateAvailable: (cb) => ipcRenderer.on('update-available', cb),
   onUpdateDownloaded: (cb) => ipcRenderer.on('update-downloaded', cb),
+  onUpdateNotAvailable: (cb) => ipcRenderer.on('update-not-available', cb),
+  onUpdateError: (cb) => ipcRenderer.on('update-error', cb),
   installUpdate: () => ipcRenderer.invoke('install-update'),
+  getAppVersion: () => ipcRenderer.invoke('get-app-version'),
+  checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
   onOpenSettings: (cb) => ipcRenderer.on('open-settings', cb),
   onOpenAbout: (cb) => ipcRenderer.on('open-about', cb)
 });

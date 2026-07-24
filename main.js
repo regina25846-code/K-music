@@ -243,6 +243,10 @@ let tray = null;
 let forceQuit = false;
 
 function getTrayIcon() {
+  const trayIconPath = path.join(__dirname, 'assets', 'icon_tray.png');
+  if (fs.existsSync(trayIconPath)) {
+    return nativeImage.createFromPath(trayIconPath);
+  }
   const iconPath = path.join(__dirname, 'assets', 'icon.png');
   if (fs.existsSync(iconPath)) {
     const img = nativeImage.createFromPath(iconPath).resize({ width: 16, height: 16 });
@@ -319,7 +323,19 @@ autoUpdater.on('update-available', () => {
 autoUpdater.on('update-downloaded', () => {
   mainWin?.webContents.send('update-downloaded');
 });
+autoUpdater.on('update-not-available', () => {
+  mainWin?.webContents.send('update-not-available');
+});
+autoUpdater.on('error', (err) => {
+  mainWin?.webContents.send('update-error', err?.message || String(err));
+});
 ipcMain.handle('install-update', () => autoUpdater.quitAndInstall());
+ipcMain.handle('get-app-version', () => app.getVersion());
+ipcMain.handle('check-for-updates', () => {
+  if (!app.isPackaged) return 'dev';
+  autoUpdater.checkForUpdates();
+  return 'checking';
+});
 app.on('window-all-closed', () => { if (forceQuit) app.quit(); });
 
 // ── IPC ──────────────────────────────────────────────────────────────────────
