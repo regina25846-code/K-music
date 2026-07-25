@@ -5,7 +5,11 @@ const BLANK_PX = 'data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEA
 // ── state ─────────────────────────────────────────────────────────────────────
 let playlists = [];
 let currentPl = 0;
+let playingPl = -1;  // which playlist the currently-loaded track actually belongs to — separate
+                      // from currentPl (whichever tab the user is just LOOKING at), since those
+                      // can differ once you view a different playlist while something plays
 let currentTrack = -1;
+let lastPosSaveTs = 0;
 let isPlaying = false;
 let repeatMode = 0;  // 0=off 1=all 2=one
 let shuffle = false;
@@ -32,6 +36,7 @@ const tCur       = $('t-cur');
 const tTot       = $('t-tot');
 const btnPlay    = $('btn-play');
 const volSlider  = $('vol');
+const volTrack   = $('vol-track');
 const plTabs     = $('pl-tabs');
 const trackList  = $('track-list');
 const loading    = $('loading');
@@ -175,7 +180,6 @@ $('settings-save').onclick = async () => {
   updateQualityBadge();
   await window.api.setLoginItem($('cfg-startup').checked);
   closeSettings();
-  toast('설정 저장됨');
 };
 
 // ── render ────────────────────────────────────────────────────────────────────
@@ -198,7 +202,7 @@ function renderTrackList() {
   }
   trackList.innerHTML = '';
   tracks.forEach((t, i) => {
-    const playing = (i===currentTrack);
+    const playing = (i===currentTrack && currentPl===playingPl);
     const numHtml = playing
       ? `<span class="eq ${isPlaying?'':'paused'}"><i></i><i></i><i></i></span>`
       : (i+1);
@@ -241,6 +245,10 @@ function renderPlView() {
       e.stopPropagation();
       if (playlists.length<=1) { toast('마지막 플레이리스트는 삭제 불가'); return; }
       playlists.splice(i,1); if(currentPl>=playlists.length) currentPl=playlists.length-1;
+      // keep playingPl valid: if the playing playlist itself was deleted, stop;
+      // if a playlist before it was removed, its index shifted down by one.
+      if (i===playingPl) { playingPl=-1; currentTrack=-1; stopAudio(); }
+      else if (i<playingPl) playingPl--;
       await save(); renderTabs(); renderTrackList(); renderPlView();
     };
     el.onclick = () => { currentPl=i; switchView('home'); renderTabs(); renderTrackList(); };
@@ -271,27 +279,27 @@ async function addByUrl(url, autoplay=false) {
     playlists[currentPl].tracks.push({ytUrl:url, title:info.title, channel:info.channel, thumbnail:info.thumbnail, duration:info.duration});
     await save(); renderTrackList();
     if (autoplay) { switchView('home'); playTrack(playlists[currentPl].tracks.length-1); }
-    else toast(`"${info.title.slice(0,20)}..." 추가됨`);
   } catch(e) { toast('추가 실패: '+e.message); } finally { hideLoad(); }
 }
 
 function removeTrack(i) {
   playlists[currentPl].tracks.splice(i,1);
-  if (currentTrack===i) { currentTrack=-1; stopAudio(); }
-  else if (currentTrack>i) currentTrack--;
+  if (currentPl===playingPl) {
+    if (currentTrack===i) { currentTrack=-1; playingPl=-1; stopAudio(); }
+    else if (currentTrack>i) currentTrack--;
+  }
   save(); renderTrackList();
 }
 
 // ── playback ──────────────────────────────────────────────────────────────────
 function setPlayIcon(playing) {
-  document.getElementById('icon-play').style.display = playing ? 'none' : '';
-  document.getElementById('icon-pause').style.display = playing ? '' : 'none';
+  btnPlay.classList.toggle('is-paused', !playing);
   vuMeter.classList.toggle('paused', !playing);
 }
 
 function stopAudio() {
   audio.pause(); audio.src='';
-  isPlaying=false; setPlayIcon(false);
+  isPlaying=false; playingPl=-1; setPlayIcon(false);
   progFill.style.width='0%'; tCur.textContent='0:00';
   albumArt.src=BLANK_PX; albumArt.classList.add('default'); trackTitle.textContent='재생 중인 곡 없음'; trackCh.textContent='—';
   lyricsState = null; lyricsForYtUrl = null; curLineIdx = -1;
@@ -300,11 +308,13 @@ function stopAudio() {
   if (inLyrics) renderLyricsPreview();
 }
 
-async function playTrack(idx) {
-  const tracks = playlists[currentPl].tracks;
+async function playTrack(idx, plIdx = currentPl, resumeSec = 0) {
+  const tracks = playlists[plIdx].tracks;
   if (!tracks[idx]) return;
   const prev = currentTrack;
+  const prevPl = playingPl;
   currentTrack = idx;
+  playingPl = plIdx;
   const t = tracks[idx];
   trackTitle.textContent = t.title;
   trackCh.textContent = t.channel;
@@ -318,14 +328,15 @@ async function playTrack(idx) {
     const url = await getStream(t.ytUrl);
     audio.src = url;
     audio.volume = volSlider.value/100;
+    if (resumeSec > 0) audio.currentTime = resumeSec;
     await audio.play();
     isPlaying=true; setPlayIcon(true);
-    await saveCfg({lastPlId: playlists[currentPl].id, lastTrackIdx: idx});
+    await saveCfg({lastPlId: playlists[plIdx].id, lastTrackIdx: idx, lastPos: resumeSec});
     if (inLyrics) ensureLyricsLoaded();
   } catch(e) {
     toast('재생 실패: '+e.message);
     isPlaying=false; setPlayIcon(false);
-    currentTrack = prev;
+    currentTrack = prev; playingPl = prevPl;
   } finally { hideLoad(); renderTrackList(); }
 }
 
@@ -490,14 +501,14 @@ function updateLyricsHighlight(force) {
 }
 
 async function ensureLyricsLoaded() {
-  const t = playlists[currentPl]?.tracks?.[currentTrack];
+  const t = playlists[playingPl]?.tracks?.[currentTrack];
   if (!t) { lyricsState = { found: false }; renderLyricsPreview(); return; }
   if (lyricsForYtUrl === t.ytUrl && lyricsState) { renderLyricsPreview(); return; }
   lyricsState = null; curLineIdx = -1;
   plainScrollOverride = false; plainScrollOffsetPx = 0;
   renderLyricsPreview();
   const res = await window.api.getLyrics(t.ytUrl, t.title, t.channel, t.duration);
-  if (playlists[currentPl]?.tracks?.[currentTrack]?.ytUrl !== t.ytUrl) return; // 그 사이 곡이 바뀜
+  if (playlists[playingPl]?.tracks?.[currentTrack]?.ytUrl !== t.ytUrl) return; // 그 사이 곡이 바뀜
   lyricsForYtUrl = t.ytUrl;
   const lrcLines = res.found ? parseLRCReliable(res.synced, t.duration) : [];
   const manualLines = res.manualSyncLines || [];
@@ -507,7 +518,7 @@ async function ensureLyricsLoaded() {
 }
 
 async function manualLyricsSearch() {
-  const t = playlists[currentPl]?.tracks?.[currentTrack];
+  const t = playlists[playingPl]?.tracks?.[currentTrack];
   if (!t) return;
   const artist = await openModal('아티스트명 입력', lyricsState?.artist || '');
   if (artist === null) return;
@@ -551,19 +562,21 @@ function togglePlay() {
 }
 
 function nextTrack() {
-  const tracks = playlists[currentPl].tracks;
+  if (playingPl<0) return;
+  const tracks = playlists[playingPl].tracks;
   if (!tracks.length) return;
   let n;
   if (repeatMode===2) n=currentTrack;
   else if (shuffle) n=Math.floor(Math.random()*tracks.length);
   else n=(currentTrack+1)%tracks.length;
-  playTrack(n);
+  playTrack(n, playingPl);
 }
 function prevTrack() {
+  if (playingPl<0) return;
   if (audio.currentTime>3) { audio.currentTime=0; return; }
-  const tracks = playlists[currentPl].tracks;
+  const tracks = playlists[playingPl].tracks;
   if (!tracks.length) return;
-  playTrack((currentTrack-1+tracks.length)%tracks.length);
+  playTrack((currentTrack-1+tracks.length)%tracks.length, playingPl);
 }
 
 // ── audio events ──────────────────────────────────────────────────────────────
@@ -572,10 +585,13 @@ audio.ontimeupdate = () => {
   progFill.style.width = (audio.currentTime/audio.duration*100)+'%';
   tCur.textContent = fmt(audio.currentTime);
   if (inLyrics) { updateLyricsHighlight(); updatePlainLyricsScroll(); }
+  const now = Date.now();
+  if (playingPl>=0 && now-lastPosSaveTs>5000) { lastPosSaveTs=now; saveCfg({lastPos: audio.currentTime}); }
 };
+audio.onpause = () => { if (playingPl>=0) saveCfg({lastPos: audio.currentTime}); };
 audio.onended = () => {
   if (repeatMode===2) { audio.currentTime=0; audio.play(); return; }
-  const tracks = playlists[currentPl].tracks;
+  const tracks = playlists[playingPl]?.tracks || [];
   if (repeatMode===0 && currentTrack===tracks.length-1) { isPlaying=false; setPlayIcon(false); renderTrackList(); return; }
   nextTrack();
 };
@@ -594,13 +610,11 @@ $('btn-repeat').onclick = function() {
   repeatMode=(repeatMode+1)%3;
   this.classList.toggle('active', repeatMode>0);
   this.querySelector('.repeat-badge').style.display = repeatMode===2 ? 'flex' : 'none';
-  toast(['반복 꺼짐','전체 반복','한 곡 반복'][repeatMode]);
 };
 $('btn-shuffle').onclick = function() {
   shuffle=!shuffle; this.classList.toggle('active', shuffle);
-  toast(shuffle?'셔플 켜짐':'셔플 꺼짐');
 };
-function updateVolSlider() { volSlider.style.setProperty('--vol-pct', volSlider.value + '%'); volPct.textContent = volSlider.value; }
+function updateVolSlider() { volTrack.style.setProperty('--vol-pct', volSlider.value + '%'); volPct.textContent = volSlider.value; }
 volSlider.oninput = function() { audio.volume=this.value/100; updateVolSlider(); };
 volSlider.onchange = function() { saveCfg({volume:parseInt(this.value)}); };
 
@@ -647,7 +661,7 @@ async function doSearch(q) {
       const btn=e.target; btn.textContent='추가 중...'; btn.disabled=true;
       playlists[currentPl].tracks.push({ytUrl:r.ytUrl,title:r.title,channel:r.channel,thumbnail:r.thumbnail,duration:r.duration});
       await save(); renderTrackList();
-      btn.textContent='✓ 추가됨'; toast(`"${r.title.slice(0,20)}..." 추가됨`);
+      btn.textContent='✓ 추가됨';
     };
     el.onclick = e => {
       if(e.target.classList.contains('s-add')) return;
@@ -703,10 +717,11 @@ function moveTrackToPlaylist(idx, targetPlIdx) {
   const track = playlists[currentPl].tracks.splice(idx, 1)[0];
   if (!track) return;
   playlists[targetPlIdx].tracks.push(track);
-  if (currentTrack === idx) { currentTrack = -1; stopAudio(); }
-  else if (currentTrack > idx) currentTrack--;
+  if (currentPl===playingPl) {
+    if (currentTrack === idx) { currentTrack = -1; stopAudio(); }
+    else if (currentTrack > idx) currentTrack--;
+  }
   save(); renderTrackList(); renderTabs();
-  toast(`"${track.title.slice(0,20)}..." → "${playlists[targetPlIdx].name}"로 이동됨`);
 }
 
 $('ctx-move').onclick = (e) => {
@@ -771,6 +786,21 @@ window.api.onOpenAbout(() => $('about-ov').classList.add('show'));
 // ── window ────────────────────────────────────────────────────────────────────
 $('btn-min').onclick = () => window.api.minimize();
 $('btn-close').onclick = () => window.api.closeApp();
+
+// 제목("K Music Player") 더블클릭 → 세로로 꽉 채우기 토글.
+// OS 기본 최대화(SC_MAXIMIZE)에 의존하지 않고, 우리가 직접 토글을 걸어준다.
+//
+// ⚠️ 왜 헤더 전체가 아니라 제목만인가 (2026-07-25, Windows에서 안 먹던 버그 수정):
+// 헤더는 -webkit-app-region:drag(프레임 없는 창을 잡고 옮기려고)인데, Windows에선
+// 이 drag 영역이 OS 상 "타이틀바(HTCAPTION)"로 취급돼서, 그 위에서 마우스를 누르면
+// Windows가 창 이동 처리로 이벤트를 가로채버림 → 렌더러 DOM엔 mousedown/click/dblclick이
+// 아예(또는 불안정하게) 안 들어옴. 맥은 drag를 다른 계층에서 처리해서 DOM 이벤트가 살아있어
+// 예전 mousedown 방식이 맥에서만 됐던 것. 그래서 제목 영역만 no-drag로 빼고(index.html
+// .app-title에 -webkit-app-region:no-drag), win-btns처럼 평범한 dblclick으로 감지한다.
+// no-drag 영역은 두 OS 모두 일반 버튼과 똑같이 이벤트가 확실히 들어옴.
+$('app-title')?.addEventListener('dblclick', () => {
+  window.api.toggleFillHeight();
+});
 function applyPinState(pinned) {
   const btn = $('btn-pin');
   btn.style.background = pinned ? 'var(--prog)' : '';
@@ -780,7 +810,6 @@ $('btn-pin').onclick = async function() {
   const pinned = await window.api.toggleAlwaysOnTop();
   applyPinState(pinned);
   await saveCfg({ alwaysOnTop: pinned });
-  toast(pinned ? '항상 위 고정 켜짐' : '항상 위 고정 꺼짐');
 };
 
 // ── init ──────────────────────────────────────────────────────────────────────
@@ -798,7 +827,7 @@ $('btn-pin').onclick = async function() {
     const pi = playlists.findIndex(p=>p.id===config.lastPlId);
     if (pi>=0) { currentPl=pi; renderTabs(); renderTrackList(); }
     if (config.autoplay && config.lastTrackIdx!=null && playlists[currentPl]?.tracks[config.lastTrackIdx]) {
-      playTrack(config.lastTrackIdx);
+      playTrack(config.lastTrackIdx, currentPl, config.lastPos||0);
     }
   }
   // restore always-on-top

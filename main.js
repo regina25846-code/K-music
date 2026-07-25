@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, shell, Tray, Menu, nativeImage } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, Tray, Menu, nativeImage, screen } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const path = require('path');
 const fs = require('fs');
@@ -242,6 +242,34 @@ let settingsWin = null;
 let tray = null;
 let forceQuit = false;
 
+// Smoothly tweens mainWin's bounds instead of snapping instantly (setBounds()
+// on its own jumps in a single frame). easeOutCubic over ~260ms.
+// Tick rate deliberately throttled below display refresh rate (~25ms/40fps
+// instead of 16ms/60fps): each native SetWindowPos on Windows forces a real
+// repaint of the whole page, and issuing them faster than Chromium can paint
+// causes the previous frame's pixels to still be on screen when the next
+// bounds change lands — visible as trailing/ghosting. Giving each step more
+// real time to fully paint before the next one arrives reduces that, even
+// though each individual jump is a bit larger.
+let boundsAnimTimer = null;
+function animateBounds(from, to, duration = 260) {
+  if (boundsAnimTimer) { clearInterval(boundsAnimTimer); boundsAnimTimer = null; }
+  const start = Date.now();
+  const ease = t => 1 - Math.pow(1 - t, 3);
+  boundsAnimTimer = setInterval(() => {
+    if (!mainWin || mainWin.isDestroyed()) { clearInterval(boundsAnimTimer); boundsAnimTimer = null; return; }
+    const t = Math.min(1, (Date.now() - start) / duration);
+    const e = ease(t);
+    mainWin.setBounds({
+      x: Math.round(from.x + (to.x - from.x) * e),
+      y: Math.round(from.y + (to.y - from.y) * e),
+      width: Math.round(from.width + (to.width - from.width) * e),
+      height: Math.round(from.height + (to.height - from.height) * e)
+    });
+    if (t >= 1) { clearInterval(boundsAnimTimer); boundsAnimTimer = null; }
+  }, 25);
+}
+
 function getTrayIcon() {
   const trayIconPath = path.join(__dirname, 'assets', 'icon_tray.png');
   if (fs.existsSync(trayIconPath)) {
@@ -272,13 +300,17 @@ function createTray() {
 }
 
 function createMainWindow() {
+  const savedHeight = loadConfig().windowHeight;
+  const maxUsableHeight = screen.getPrimaryDisplay().workAreaSize.height;
+  const validSaved = typeof savedHeight === 'number' && savedHeight >= 884 && savedHeight <= maxUsableHeight;
   mainWin = new BrowserWindow({
     width: 400,
-    height: 680,
-    minHeight: 680,
+    height: validSaved ? savedHeight : 884,
+    minHeight: 884,
     minWidth: 400,
     maxWidth: 400,
     resizable: true,
+    maximizable: false,
     frame: false,
     skipTaskbar: false,
     webPreferences: {
@@ -288,6 +320,99 @@ function createMainWindow() {
     }
   });
   mainWin.loadFile('renderer/index.html');
+
+  // ── "Fill height" double-click toggle ────────────────────────────────────────
+  // We drive this feature ENTIRELY from our own double-click detection in the
+  // renderer (renderer/app.js sends 'toggle-fill-height' over IPC) plus a plain
+  // setBounds() here — never native OS maximize. `maximizable: false` above stops
+  // Windows from ALSO trying to run its own SC_MAXIMIZE on the same double-click;
+  // without it, the native maximize attempt and our own setBounds() raced each
+  // other (the OS's own unmaximize/restore was clobbering our fill immediately
+  // after we applied it — the "fills then instantly reverts" symptom).
+
+  // filled = are we currently in the "filled to work-area height" state.
+  // preFillBounds = the exact bounds to restore to when toggling back off.
+  let filled = false;
+  let preFillBounds = null;
+  let dragUnsnapTimer = null;
+  const toggleFillHeight = () => {
+    if (!mainWin || mainWin.isDestroyed()) return;
+    if (dragUnsnapTimer) { clearTimeout(dragUnsnapTimer); dragUnsnapTimer = null; }
+    if (mainWin.isMaximized()) mainWin.unmaximize(); // paranoia; should never be true
+    if (!filled) {
+      // Fill branch: remember where we are, then snap to the LEFT edge of
+      // whichever monitor the window currently sits on and grow to that
+      // display's full work-area height. width stays 400. workArea excludes
+      // the taskbar on whichever edge/monitor it's docked.
+      const cur = mainWin.getBounds();
+      const wa = screen.getDisplayMatching(cur).workArea;
+      preFillBounds = cur;
+      filled = true;
+      animateBounds(cur, { x: wa.x, y: wa.y, width: 400, height: wa.height });
+    } else {
+      // Restore branch: go back to exactly where we were before filling.
+      const cur = mainWin.getBounds();
+      const restoreTo = preFillBounds || cur;
+      preFillBounds = null;
+      filled = false;
+      animateBounds(cur, restoreTo);
+    }
+  };
+  ipcMain.handle('toggle-fill-height', () => { toggleFillHeight(); });
+
+  // If the user drags the window away while it's filled (instead of
+  // double-clicking to restore), treat that like Windows' own "unsnap":
+  // shrink back to the pre-fill height right where the drag left it, forget the
+  // old remembered spot, and let wherever it lands become the new "normal"
+  // position. Next double-click then does a fresh fill from there.
+  //
+  // ⚠️ CRITICAL — why we WAIT for the drag to stop instead of resizing on the
+  // first 'move' tick (2026-07-25, fixes the "flashes + jumps to left edge
+  // first" bug on real Windows hardware):
+  //   Dragging the -webkit-app-region:drag header is a NATIVE Windows title-bar
+  //   (HTCAPTION) drag. For the whole time the mouse button is held, Windows runs
+  //   its OWN modal move loop that OWNS the window rectangle: every mouse move it
+  //   recomputes the window origin from a grab-offset it cached at mouse-down and
+  //   drives the window with its own SetWindowPos. If WE call setBounds() in the
+  //   middle of that loop (which is exactly what a 'move'-triggered resize does —
+  //   'move' fires from WM_MOVE, i.e. mid-drag), two writers fight over the same
+  //   rect within one drag: the OS loop's cached anchor no longer matches the
+  //   window we just resized, so it yanks toward its stale reference (the visible
+  //   left-edge snap) and the back-and-forth reconciliation shows up as flicker.
+  //   So we DON'T touch bounds while movement is happening. We only (re)arm a short
+  //   timer on every 'move'; a real drag emits a continuous stream, so the timer
+  //   keeps resetting and never fires mid-motion. It only fires once movement goes
+  //   quiet — mouse released, OR held still — and at THAT moment the OS move loop
+  //   is idle, so a single setBounds() lands cleanly with no fight, no flicker, and
+  //   no detour to the left edge. Height-only shrink with x/y preserved also keeps
+  //   the OS grab-offset (cursor→top-left) valid if the user resumes after a pause.
+  mainWin.on('move', () => {
+    if (boundsAnimTimer) return; // our own animateBounds() is driving this move, ignore
+    if (!filled) return;
+    const targetHeight = preFillBounds ? preFillBounds.height : mainWin.getBounds().height;
+    if (dragUnsnapTimer) clearTimeout(dragUnsnapTimer);
+    dragUnsnapTimer = setTimeout(() => {
+      dragUnsnapTimer = null;
+      if (!mainWin || mainWin.isDestroyed()) return;
+      if (boundsAnimTimer) return; // an animation started in the meantime; let it own the bounds
+      if (!filled) return;         // toggled off some other way in the meantime
+      filled = false;
+      preFillBounds = null;
+      const cur = mainWin.getBounds();
+      mainWin.setBounds({ x: cur.x, y: cur.y, width: 400, height: targetHeight });
+    }, 140);
+  });
+
+  let resizeSaveTimer = null;
+  mainWin.on('resize', () => {
+    if (filled) return; // don't persist the temporary filled height
+    clearTimeout(resizeSaveTimer);
+    resizeSaveTimer = setTimeout(() => {
+      if (filled) return;
+      const [, h] = mainWin.getSize();
+      saveConfig({ ...loadConfig(), windowHeight: h });
+    }, 400);
+  });
 
   mainWin.on('close', e => {
     if (!forceQuit) {

@@ -17,6 +17,7 @@ contextBridge.exposeInMainWorld('api', {
   minimize: () => ipcRenderer.invoke('minimize'),
   closeApp: () => ipcRenderer.invoke('close-app'),
   quitApp: () => ipcRenderer.invoke('quit-app'),
+  toggleFillHeight: () => ipcRenderer.invoke('toggle-fill-height'),
   checkYtdlp: () => ipcRenderer.invoke('check-ytdlp'),
   getLyrics: (ytUrl, title, channel, duration) => ipcRenderer.invoke('get-lyrics', ytUrl, title, channel, duration),
   searchLyricsManual: (ytUrl, artist, title, duration) => ipcRenderer.invoke('search-lyrics-manual', ytUrl, artist, title, duration),

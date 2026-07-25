@@ -24,6 +24,14 @@
   --readout:   #C7B8A0;
   --mono: ui-monospace, "SF Mono", "JetBrains Mono", "Menlo", "Consolas", monospace;
   --sans: system-ui, -apple-system, "Segoe UI", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", sans-serif;
+  --surf-hi:   #262631;
+  --surf:      #1C1C24;
+  --surf-lo:   #0E0E12;
+  --sheen-hi:  rgba(255,255,255,0.06);
+  --sheen-lo:  rgba(0,0,0,0.35);
+  --paper-2:   #16161C;
+  --paper-3:   #0E0E12;
+  --prog-hi:   #FF7F63;
 }
 [data-theme="white"] {
   --bg:        #EDECE8;
@@ -41,12 +49,93 @@
   --tog-green: #E8492A;
   --k-color:   #E8492A;
   --readout:   #6B5B43;
+  --surf-hi:   #FFFFFF;
+  --surf:      #F7F6F3;
+  --surf-lo:   #DEDDD6;
+  --sheen-hi:  rgba(255,255,255,0.8);
+  --sheen-lo:  rgba(0,0,0,0.10);
+  --paper-2:   #F7F6F3;
+  --paper-3:   #EDECE8;
+  --prog-hi:   #F06B4E;
+}
+[data-theme="ambient"] {
+  --bg:        #EBDFC6;
+  --panel:     #E1D2B2;
+  --card:      #D9C7A3;
+  --active-tr: #DCCBA4;
+  --text:      #372A18;
+  --text2:     #6B5636;
+  --text3:     #927A54;
+  --border:    rgba(56,40,16,0.22);
+  --line:      rgba(56,40,16,0.14);
+  --prog:      #A23C1B;
+  --nav-bg:    #E1D2B2;
+  --tog-blue:  #A23C1B;
+  --tog-green: #A23C1B;
+  --k-color:   #A23C1B;
+  --readout:   #6B5636;
+  --surf-hi:   #F2D799;
+  --surf:      #B58F4E;
+  --surf-lo:   #6E5024;
+  --sheen-hi:  rgba(255,246,224,0.65);
+  --sheen-lo:  rgba(60,42,18,0.55);
+  --paper-2:   #E1D2B2;
+  --paper-3:   #D3BE97;
+  --prog-hi:   #C65B33;
+  --disp: Palatino, "Palatino Linotype", "Book Antiqua", "Iowan Old Style", Georgia, serif;
+  --mono: "Courier New", Courier, "Nimbus Mono", monospace;
+}
+[data-theme="midnight"] {
+  --bg:        #241A11;
+  --panel:     #1C130B;
+  --card:      #160F09;
+  --active-tr: #20160D;
+  --text:      #EAD6AE;
+  --text2:     #C0A574;
+  --text3:     #8C7548;
+  --border:    rgba(255,220,150,0.10);
+  --line:      rgba(255,220,150,0.07);
+  --prog:      #E0913A;
+  --nav-bg:    #1C130B;
+  --tog-blue:  #E0913A;
+  --tog-green: #E0913A;
+  --k-color:   #E0913A;
+  --readout:   #C0A574;
+  --surf-hi:   #FFE6A8;
+  --surf:      #C69A52;
+  --surf-lo:   #4A340F;
+  --sheen-hi:  rgba(255,220,150,0.14);
+  --sheen-lo:  rgba(0,0,0,0.6);
+  --paper-2:   #1C130B;
+  --paper-3:   #120C06;
+  --prog-hi:   #F6B45C;
+  --disp: Palatino, "Palatino Linotype", "Book Antiqua", "Iowan Old Style", Georgia, serif;
+  --mono: "Courier New", Courier, "Nimbus Mono", monospace;
+}
+[data-theme="ambient"] .track-title, [data-theme="ambient"] .brand-word,
+[data-theme="ambient"] .pl-tab,
+[data-theme="ambient"] .pl-act-btn, [data-theme="ambient"] .search-box input,
+[data-theme="midnight"] .track-title, [data-theme="midnight"] .brand-word,
+[data-theme="midnight"] .pl-tab,
+[data-theme="midnight"] .pl-act-btn, [data-theme="midnight"] .search-box input {
+  font-family: var(--disp), var(--sans);
+}
+/* Artist/channel name text stays on the plain default (graphite/light) font in
+   the vintage skins too — the italic serif treatment tried here first (Palatino
+   falling back to a Korean serif like Batang on Windows for Hangul, which has no
+   true italic face and gets faux-obliqued into overlapping, illegible strokes;
+   font-synthesis:none was tried and didn't fully resolve it on real hardware) —
+   simplest reliable fix is to just not use the vintage serif for this text at all. */
+[data-theme="ambient"] .t-ch, [data-theme="midnight"] .t-ch,
+[data-theme="ambient"] .s-ch, [data-theme="midnight"] .s-ch,
+[data-theme="ambient"] .track-channel, [data-theme="midnight"] .track-channel {
+  font-family: var(--sans);
 }
 
 html { height: 100%; }
 html, body {
-  width: 400px; min-height: 680px; height: 100%; overflow: hidden;
-  background: var(--bg); color: var(--text);
+  width: 400px; min-height: 884px; height: 100%; overflow: hidden;
+  background: linear-gradient(158deg, var(--panel) 0%, var(--card) 48%, var(--bg) 100%); color: var(--text);
   font-family: var(--sans);
   user-select: none;
   display: flex; flex-direction: column;
@@ -61,6 +150,11 @@ html, body {
   height: 56px;
 }
 .app-title {
+  /* no-drag 핫스팟: -webkit-app-region:drag 영역(.header)에서는 Windows가
+     mousedown을 OS 창이동(HTCAPTION) 처리로 가로채서 DOM 이벤트가 안 옴.
+     제목만 no-drag로 빼면 일반 버튼처럼 dblclick이 두 OS 모두 확실히 들어온다. */
+  -webkit-app-region: no-drag;
+  cursor: default;
   font-size: 16px; color: var(--text); line-height: 1;
   display: flex; align-items: center; gap: 9px;
 }
@@ -71,8 +165,8 @@ html, body {
   color: #fff; font-weight: 800; font-size: 14px;
   box-shadow: 0 2px 8px -1px rgba(255,92,61,0.4);
 }
-.brand-word { font-weight: 800; font-size: 15px; letter-spacing: -0.01em; color: var(--text); }
-.brand-word .sub { color: var(--text3); font-weight: 500; }
+.brand-word { font-weight: 600; font-size: 17px; letter-spacing: 0.01em; color: var(--text); }
+.brand-word .sub { color: var(--text3); font-style: italic; }
 
 .win-btns {
   -webkit-app-region: no-drag;
@@ -96,13 +190,15 @@ html, body {
 .search-box:focus-within { border-color: var(--border); background: var(--panel); }
 .search-box .icon { color: var(--text3); display: flex; align-items: center; }
 .search-box input {
-  flex: 1; background: none; border: none; outline: none;
+  flex: 1; background: none; border: none; outline: none; font-style: italic;
   font-size: 13px; color: var(--text); font-family: inherit;
 }
 .search-box input::placeholder { color: var(--text3); }
 .search-box .kbd {
   font-family: var(--mono); font-size: 10px; color: var(--text3);
-  border: 1px solid var(--border); border-radius: 5px; padding: 2px 6px; flex-shrink: 0;
+  border: none; border-radius: 5px; padding: 2px 6px; flex-shrink: 0;
+  background: linear-gradient(180deg, var(--surf-hi), var(--surf));
+  box-shadow: inset 0 1px 0 var(--sheen-hi), 0 1px 2px rgba(0,0,0,0.35);
 }
 
 /* ── VIEWS ── */
@@ -110,7 +206,7 @@ html, body {
 .view.active { display: flex; }
 
 /* ── HOME: PLAYER ── */
-.player { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 4px 16px 4px; flex-shrink: 0; position: relative; transition: background 0.55s; }
+.player { display: flex; flex-direction: column; align-items: center; padding: 2px 16px 0; flex-shrink: 0; position: relative; transition: background 0.55s; }
 body.lyrics-mode .player { background: rgba(0,0,0,0.15); }
 .np-glow {
   position: absolute; left: 50%; top: 4px; transform: translateX(-50%);
@@ -163,15 +259,28 @@ body.lyrics-mode .art-wrap {
 body.lyrics-mode .art-badge { opacity: 0; }
 
 /* ── VU METER ── */
-.vu { display: flex; align-items: flex-end; justify-content: center; gap: 3px; height: 18px; margin: 2px 0; }
-.vu i { width: 3px; border-radius: 2px; background: var(--prog); opacity: 0.9; height: 20%; animation: vu-bounce 1.1s ease-in-out infinite; }
-.vu.paused i { animation-play-state: paused; height: 20%; }
-@keyframes vu-bounce { 0%, 100% { height: 20%; } 50% { height: 100%; } }
-@media (prefers-reduced-motion: reduce) { .vu i, .eq i { animation: none !important; } }
-.track-title { font-size: 18px; font-weight: 800; color: var(--text); text-align: center; max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.track-channel { font-size: 12px; color: var(--text2); text-align: center; }
+.vu { width: 100%; margin: 12px 0 4px; }
+.meter-scale {
+  display: flex; justify-content: space-between;
+  font-family: var(--mono); font-size: 8.5px; letter-spacing: 0.05em; color: var(--text3);
+  padding: 0 2px 7px;
+}
+.meter-dots {
+  display: flex; align-items: flex-end; justify-content: space-between; height: 26px; gap: 1px;
+}
+.meter-dots .col { display: flex; flex-direction: column-reverse; align-items: center; gap: 2px; flex: 1; }
+.meter-dots .col b {
+  width: 3px; height: 3px; border-radius: 50%; background: var(--text2); opacity: 0.55;
+}
+.meter-dots .col b.lit { background: var(--prog); opacity: 1; box-shadow: 0 0 3px var(--prog-hi); }
+@keyframes meterPulse { 0%,100% { transform: scaleY(1); } 50% { transform: scaleY(0.8); } }
+.vu:not(.paused) .meter-dots .col { animation: meterPulse 1.4s ease-in-out infinite; animation-delay: var(--d, 0s); transform-origin: bottom; }
+.vu.paused .meter-dots .col { transition: transform .3s ease; }
+@media (prefers-reduced-motion: reduce) { .vu:not(.paused) .meter-dots .col, .eq i { animation: none !important; } }
+.track-title { margin-top: 14px; font-size: 18px; font-weight: 600; color: var(--text); text-align: center; max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.track-channel { margin-top: 2px; font-size: 12.5px; font-style: italic; color: var(--text2); text-align: center; }
 
-.progress-wrap { width: 100%; }
+.progress-wrap { width: 100%; margin-top: 6px; }
 .progress-bar {
   width: 100%; height: 4px; background: var(--border); border-radius: 2px; cursor: pointer; position: relative;
 }
@@ -181,33 +290,96 @@ body.lyrics-mode .art-badge { opacity: 0; }
   width: 12px; height: 12px; border-radius: 50%; background: var(--prog); opacity: 0; transition: opacity 0.2s;
 }
 .progress-wrap:hover .progress-fill::after { opacity: 1; }
+.ticks { display: none; }
 
 .time-row { display: flex; justify-content: space-between; margin-top: 4px; }
-.time-row span { font-size: 10px; color: var(--text3); font-weight: 500; }
+.time-row span { font-size: 11px; color: var(--text2); letter-spacing: 0.02em; }
 
-.controls { display: flex; align-items: center; justify-content: center; gap: 22px; width: 100%; padding: 0; }
+.controls { display: flex; align-items: center; justify-content: center; gap: 16px; width: 100%; padding: 0; }
 .ctrl-btn { background: none; border: none; cursor: pointer; color: var(--text); display: flex; align-items: center; justify-content: center; transition: transform 0.1s, color 0.2s; }
 .ctrl-btn:hover { color: var(--prog); transform: scale(1.05); }
 .ctrl-btn:active { transform: scale(0.95); }
-.ctrl-btn.play { width: 52px; height: 52px; background: var(--text); color: var(--bg); border-radius: 50%; }
+.ctrl-btn.play { width: 66px; height: 66px; background: var(--text); color: var(--bg); border-radius: 50%; position: relative; }
 .ctrl-btn.play:hover { background: var(--prog); color: var(--bg); transform: scale(1.05); }
-.ctrl-btn.skip { color: var(--text); opacity: 0.8; }
+.ctrl-btn.play svg { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%) scale(1) rotate(0deg); transition: opacity .22s cubic-bezier(.4,0,.2,1), transform .22s cubic-bezier(.4,0,.2,1); }
+.ctrl-btn.play #icon-play { opacity: 0; transform: translate(-50%,-50%) scale(.55) rotate(-90deg); }
+.ctrl-btn.play.is-paused #icon-pause { opacity: 0; transform: translate(-50%,-50%) scale(.55) rotate(90deg); }
+.ctrl-btn.play.is-paused #icon-play { opacity: 1; transform: translate(-50%,-50%) scale(1) rotate(0deg); }
+.ctrl-btn.skip { width: 44px; height: 44px; color: var(--text); opacity: 0.8; }
 .ctrl-btn.skip:hover { opacity: 1; color: var(--text); }
 
-.ctrl-btn.side { color: var(--text3); }
+.ctrl-btn.side { width: 34px; height: 34px; color: var(--text3); }
 .ctrl-btn.side:hover { color: var(--text); }
 .ctrl-btn.side.active { color: var(--prog); }
 
-.vol-row { display: flex; align-items: center; gap: 10px; width: 100%; padding: 0 4px; }
-.vol-icon { color: var(--text3); display: flex; align-items: center; }
+/* ── VINTAGE (Ambient/Midnight) domed brass control buttons ── */
+[data-theme="ambient"] .ctrl-btn, [data-theme="midnight"] .ctrl-btn {
+  width: 40px; height: 40px; border-radius: 50%; color: #1A0F04;
+  background: radial-gradient(120% 120% at 32% 24%, var(--surf-hi) 0%, var(--surf) 46%, var(--surf-lo) 100%);
+  box-shadow:
+    inset 0 1.5px 1px rgba(255,248,224,0.85),
+    inset 0 -3px 4px rgba(70,48,16,0.6),
+    0 3px 5px rgba(40,26,8,0.45),
+    0 0 0 1px var(--surf-lo),
+    0 0 0 4px rgba(255,246,224,0.10);
+  transition: transform 0.09s, box-shadow 0.09s, filter 0.2s;
+}
+[data-theme="ambient"] .ctrl-btn:hover, [data-theme="midnight"] .ctrl-btn:hover { filter: brightness(1.06); color: #1A0F04; transform: none; }
+[data-theme="ambient"] .ctrl-btn:active, [data-theme="midnight"] .ctrl-btn:active {
+  transform: translateY(1px); filter: none;
+  box-shadow: inset 0 2px 4px rgba(70,48,16,0.8), inset 0 -1px 1px rgba(255,248,224,0.3), 0 1px 2px rgba(0,0,0,0.4), 0 0 0 1px var(--surf-lo);
+}
+[data-theme="ambient"] .ctrl-btn.side, [data-theme="midnight"] .ctrl-btn.side { width: 34px; height: 34px; color: #1A0F04; stroke-width: 2.6; }
+[data-theme="ambient"] .ctrl-btn.side.active, [data-theme="midnight"] .ctrl-btn.side.active { color: var(--prog); }
+[data-theme="ambient"] .ctrl-btn.skip, [data-theme="midnight"] .ctrl-btn.skip { width: 44px; height: 44px; opacity: 1; }
+[data-theme="ambient"] .ctrl-btn.play, [data-theme="midnight"] .ctrl-btn.play {
+  width: 66px; height: 66px; color: var(--prog);
+  box-shadow:
+    inset 0 2px 2px rgba(255,248,224,0.9),
+    inset 0 -4px 6px rgba(70,48,16,0.65),
+    0 5px 10px rgba(40,26,8,0.55),
+    0 0 0 2px var(--surf-lo),
+    0 0 0 6px rgba(138,108,53,0.55),
+    0 0 0 8px rgba(255,246,224,0.14);
+}
+[data-theme="ambient"] .ctrl-btn.play:hover, [data-theme="midnight"] .ctrl-btn.play:hover {
+  background: radial-gradient(120% 120% at 32% 24%, var(--surf-hi) 0%, var(--surf) 46%, var(--surf-lo) 100%);
+  color: var(--prog);
+}
+
+.vol-row { display: flex; align-items: center; gap: 12px; width: 100%; padding: 12px 4px 4px; }
+.vol-icon { color: var(--text2); display: flex; align-items: center; }
+.vol-track {
+  flex: 1; position: relative; height: 8px; border-radius: 5px; cursor: pointer;
+  background: var(--border);
+  box-shadow: none;
+}
+[data-theme="ambient"] .vol-track, [data-theme="midnight"] .vol-track {
+  background: linear-gradient(180deg, var(--paper-3), var(--paper-2));
+  box-shadow: inset 0 1.5px 3px var(--sheen-lo), inset 0 -1px 0 var(--sheen-hi);
+}
+.vol-fill {
+  position: absolute; top: 2px; bottom: 2px; left: 2px; width: calc(var(--vol-pct, 80%) - 2px); border-radius: 4px;
+  background: linear-gradient(180deg, var(--surf), var(--surf-lo));
+  box-shadow: inset 0 1px 0 rgba(255,246,220,0.4);
+  pointer-events: none;
+}
+.vol-knob {
+  position: absolute; top: 50%; left: var(--vol-pct, 80%); transform: translate(-50%,-50%);
+  width: 15px; height: 15px; border-radius: 50%;
+  background: radial-gradient(circle at 34% 28%, var(--surf-hi), var(--surf) 46%, var(--surf-lo));
+  box-shadow: inset 0 1px 1px rgba(255,248,224,0.8), 0 2px 3px rgba(30,18,6,0.5), 0 0 0 1px var(--surf-lo);
+  pointer-events: none;
+}
 input[type=range].vol {
-  flex: 1; -webkit-appearance: none; height: 4px; border-radius: 2px; outline: none; cursor: pointer;
-  background: linear-gradient(to right, var(--text2) 0%, var(--text2) var(--vol-pct, 80%), var(--border) var(--vol-pct, 80%), var(--border) 100%);
+  position: absolute; inset: -6px 0; width: 100%; height: 20px; margin: 0;
+  -webkit-appearance: none; appearance: none; background: transparent; outline: none; cursor: pointer;
 }
+input[type=range].vol::-webkit-slider-runnable-track { background: transparent; }
 input[type=range].vol::-webkit-slider-thumb {
-  -webkit-appearance: none; width: 12px; height: 12px; border-radius: 50%; background: var(--text); cursor: pointer;
+  -webkit-appearance: none; width: 15px; height: 15px; border-radius: 50%; background: transparent; cursor: pointer;
 }
-.vol-pct { font-family: var(--mono); font-size: 11px; color: var(--text3); width: 28px; text-align: right; flex-shrink: 0; font-variant-numeric: tabular-nums; }
+.vol-pct { font-family: var(--mono); font-size: 11px; color: var(--text2); width: 28px; text-align: right; flex-shrink: 0; font-variant-numeric: tabular-nums; }
 
 /* ── PLAYLIST TABS ── */
 .pl-tabs { display: flex; gap: 16px; padding: 0 20px; overflow-x: auto; flex-shrink: 0; scrollbar-width: none; border-bottom: 1px solid var(--border); margin-bottom: 4px; }
@@ -233,16 +405,20 @@ input[type=range].vol::-webkit-slider-thumb {
 .track-item.playing .t-title { color: var(--prog); }
 .t-num { width: 20px; font-size: 12px; color: var(--text3); text-align: center; flex-shrink: 0; font-variant-numeric: tabular-nums; display: flex; align-items: center; justify-content: center; }
 .t-num.arrow { color: var(--prog); font-size: 14px; }
-.eq { display: flex; align-items: flex-end; justify-content: center; gap: 2px; height: 12px; }
-.eq i { width: 2.5px; background: var(--prog); border-radius: 1px; height: 30%; animation: vu-bounce 1s ease-in-out infinite; }
+.eq { display: flex; align-items: flex-end; justify-content: center; gap: 2px; height: 15px; }
+.eq i { width: 2.5px; background: var(--prog); border-radius: 1px; height: 30%; transform-origin: bottom; animation: vu-bounce 1s ease-in-out infinite; }
 .eq i:nth-child(2) { animation-delay: 0.2s; }
 .eq i:nth-child(3) { animation-delay: 0.35s; }
 .eq.paused i { animation-play-state: paused; height: 60%; }
+@keyframes vu-bounce { 0%,100% { transform: scaleY(0.6); } 50% { transform: scaleY(2.4); } }
 .t-thumb { width: 44px; height: 44px; border-radius: 8px; object-fit: cover; background: var(--border); flex-shrink: 0; }
 .t-meta { flex: 1; overflow: hidden; }
-.t-title { font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
-.t-ch { font-size: 11px; color: var(--text2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 4px; }
-.t-dur { font-family: var(--mono); font-size: 11px; color: var(--text3); flex-shrink: 0; font-variant-numeric: tabular-nums; }
+.t-title { font-family: var(--disp); font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text2); }
+.t-ch { font-family: var(--disp); font-style: italic; font-size: 11px; color: var(--text2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 2px; }
+.track-item:not(.playing) .t-ch { color: var(--text3); }
+.repeat-badge { color: #000; font-family: var(--mono); }
+[data-theme="ambient"] .repeat-badge, [data-theme="white"] .repeat-badge, [data-theme="midnight"] .repeat-badge { color: #fff; }
+.t-dur { font-family: var(--mono); font-size: 11px; color: var(--text2); flex-shrink: 0; font-variant-numeric: tabular-nums; }
 .t-del { background: none; border: none; color: var(--text3); cursor: pointer; padding: 4px; flex-shrink: 0; opacity: 0; transition: all 0.2s; }
 .track-item:hover .t-del { opacity: 1; }
 .t-del:hover { color: #FA243C; }
@@ -280,12 +456,14 @@ body.lyrics-mode .lyr-preview { display: flex; }
 .lyr-reset-link:hover { color: var(--text); }
 
 /* ── BOTTOM PLAYLIST ACTIONS ── */
-.pl-actions { display: flex; gap: 8px; align-items: center; padding: 12px 20px; background: var(--bg); border-top: 1px solid var(--border); flex-shrink: 0; }
+.pl-actions { display: flex; gap: 10px; align-items: center; padding: 12px 20px 14px; flex-shrink: 0; }
 .pl-act-btn {
-  background: transparent; border: 1px solid var(--border); border-radius: 20px;
-  padding: 6px 16px; font-size: 11px; font-weight: 600; color: var(--text); cursor: pointer; transition: all 0.2s;
+  background: linear-gradient(180deg, rgba(255,246,224,0.4), rgba(120,88,44,0.14)); border: none; border-radius: 999px;
+  box-shadow: inset 0 1px 0 rgba(255,246,224,0.6), 0 1px 2px rgba(60,42,18,0.3), 0 0 0 1px var(--border);
+  padding: 8px 18px; font-size: 12px; font-weight: 600; color: var(--text); cursor: pointer; transition: filter 0.15s, transform 0.09s;
 }
-.pl-act-btn:hover { border-color: var(--text); background: var(--border); }
+.pl-act-btn:hover { filter: brightness(1.08); }
+.pl-act-btn:active { transform: translateY(1px); }
 .pl-act-btn.del-pl { margin-left: auto; color: #FA243C; border-color: rgba(250, 36, 60, 0.3); }
 .pl-act-btn.del-pl:hover { background: rgba(250, 36, 60, 0.1); border-color: #FA243C; }
 
@@ -297,8 +475,8 @@ body.lyrics-mode .lyr-preview { display: flex; }
 .s-item:hover { background: var(--card); }
 .s-thumb { width: 64px; height: 44px; object-fit: cover; border-radius: 8px; background: var(--border); flex-shrink: 0; }
 .s-meta { flex: 1; overflow: hidden; }
-.s-title { font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
-.s-ch { font-size: 11px; color: var(--text2); margin-top: 4px; }
+.s-title { font-family: var(--disp); font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+.s-ch { font-family: var(--disp); font-style: italic; font-size: 11px; color: var(--text2); margin-top: 4px; }
 .s-add { background: transparent; border: 1px solid var(--text3); border-radius: 12px; padding: 4px 12px; font-size: 11px; font-weight: 600; color: var(--text); cursor: pointer; flex-shrink: 0; transition: all 0.2s; }
 .s-item:hover .s-add { border-color: var(--prog); color: var(--prog); }
 .s-add:hover { background: var(--prog) !important; color: var(--bg) !important; border-color: var(--prog) !important; }
@@ -325,19 +503,22 @@ body.lyrics-mode .lyr-preview { display: flex; }
 
 /* ── BOTTOM NAV ── */
 .bottom-nav {
-  height: 56px; background: var(--nav-bg); border-top: 1px solid var(--border);
+  height: 56px; margin-top: 2px;
+  background: linear-gradient(180deg, var(--paper-3), var(--paper-2));
+  box-shadow: inset 0 2px 4px var(--sheen-lo), inset 0 1px 0 var(--sheen-hi);
   display: flex; flex-shrink: 0; padding-bottom: 4px;
 }
 .nav-btn {
   flex: 1; background: none; border: none; cursor: pointer;
   display: flex; flex-direction: column; align-items: center; justify-content: center;
-  gap: 4px; color: var(--text3); font-size: 10px; font-weight: 500; font-family: inherit;
+  gap: 5px; color: var(--text3); font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.1em; text-transform: uppercase;
   transition: color 0.2s;
 }
-.nav-icon { display: flex; align-items: center; justify-content: center; }
+.nav-icon { display: flex; align-items: center; justify-content: center; color: var(--text2); transition: color 0.2s, transform 0.15s; }
 .nav-btn.active { color: var(--text); }
-.nav-btn.active .nav-icon { color: var(--prog); }
+.nav-btn.active .nav-icon { color: var(--prog); filter: drop-shadow(0 1px 1px rgba(0,0,0,0.25)); }
 .nav-btn:hover:not(.active) { color: var(--text2); }
+.nav-btn:hover:not(.active) .nav-icon { transform: translateY(-1px); }
 
 /* ── OVERLAYS & MODALS ── */
 .settings-overlay, .modal-ov {
@@ -367,59 +548,105 @@ body.lyrics-mode .lyr-preview { display: flex; }
 /* ── SETTINGS ── */
 .settings-overlay { z-index: 300; }
 .settings-card {
-  background: var(--panel); border: 1px solid var(--border); border-radius: 16px; width: 340px;
+  background: linear-gradient(158deg, var(--panel) 0%, var(--card) 55%, var(--bg) 100%);
+  border: 1px solid var(--border); border-radius: 16px; width: 340px;
   box-shadow: 0 16px 40px rgba(0,0,0,0.5); overflow: hidden;
 }
 .settings-head {
   display: flex; align-items: center; justify-content: center;
   padding: 24px 20px 16px; position: relative;
+  border-bottom: 1px solid var(--border);
 }
-.settings-head h2 { font-size: 16px; font-weight: 700; color: var(--text); }
+.settings-head h2 {
+  font-size: 13px; font-weight: 700; color: var(--text);
+  font-family: var(--mono); letter-spacing: 0.18em; text-transform: uppercase;
+}
 .settings-close {
-  position: absolute; right: 8px; top: 12px; padding: 8px; border-radius: 8px;
-  background: none; border: none; color: var(--text2); cursor: pointer; display: flex; align-items: center; transition: color 0.2s, background 0.2s;
+  position: absolute; right: 14px; top: 14px; width: 28px; height: 28px; padding: 0; border-radius: 50%;
+  background: linear-gradient(180deg, var(--surf-hi), var(--surf-lo));
+  box-shadow: inset 0 1px 0 var(--sheen-hi), inset 0 -1px 2px var(--sheen-lo), 0 0 0 1px var(--border);
+  border: none; color: var(--text2); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: color 0.2s, filter 0.2s;
 }
-.settings-close:hover { background: var(--card); color: var(--text); }
+.settings-close:hover { filter: brightness(1.08); color: var(--text); }
 .settings-row {
   display: flex; align-items: center; gap: 16px;
-  padding: 16px 20px; border-top: 1px solid var(--border);
+  margin: 0 16px 8px; padding: 13px 14px; border-radius: 10px;
+  background: linear-gradient(180deg, var(--sheen-hi), transparent 60%), var(--card);
+  box-shadow: inset 0 1px 0 var(--sheen-hi), inset 0 -1px 3px var(--sheen-lo);
 }
 .set-group-lab {
   font-family: var(--mono); font-size: 10px; font-weight: 700; letter-spacing: 0.14em;
-  text-transform: uppercase; color: var(--prog); padding: 16px 20px 4px; border-top: 1px solid var(--border);
+  text-transform: uppercase; color: var(--prog); padding: 16px 20px 8px;
 }
-.set-group-lab:first-of-type { border-top: none; padding-top: 18px; }
-.set-group-lab + .settings-row { border-top: none; }
+.set-group-lab:first-of-type { padding-top: 18px; }
 .srow-icon {
-  width: 36px; height: 36px; border-radius: 8px; background: var(--card); color: var(--text);
+  width: 36px; height: 36px; border-radius: 8px; color: var(--text2);
+  background: linear-gradient(180deg, var(--surf-hi), var(--surf-lo));
+  box-shadow: inset 0 1px 0 var(--sheen-hi), inset 0 -1px 2px var(--sheen-lo);
   display: flex; align-items: center; justify-content: center; flex-shrink: 0;
 }
 .srow-text { flex: 1; min-width: 0; }
 .srow-label { font-size: 13px; font-weight: 600; color: var(--text); }
 .srow-sub { font-size: 11px; color: var(--text3); margin-top: 3px; line-height: 1.5; word-break: keep-all; }
 .srow-ctrl select {
-  background: var(--card); border: 1px solid var(--border); border-radius: 6px;
+  background: linear-gradient(180deg, var(--surf-hi), var(--surf-lo)); border: none; border-radius: 6px;
+  box-shadow: inset 0 1px 0 var(--sheen-hi), inset 0 -1px 2px var(--sheen-lo), 0 1px 2px rgba(0,0,0,0.15);
   padding: 8px 12px; font-size: 12px; color: var(--text); outline: none; cursor: pointer;
   min-width: 100px; font-family: inherit;
 }
+/* dropdown option popups are OS-rendered on Windows and ignore gradient backgrounds —
+   force a solid, explicitly-contrasted color pair so option text stays readable */
+select option { background: var(--card); color: var(--text); }
 .tog { position: relative; width: 44px; height: 24px; flex-shrink: 0; }
 .tog input { opacity: 0; width: 0; height: 0; position: absolute; }
 .tog-track {
-  position: absolute; inset: 0; background: var(--border); border-radius: 12px; cursor: pointer; transition: background 0.2s;
+  position: absolute; inset: 0; border-radius: 12px; cursor: pointer; transition: background 0.2s;
+  background: linear-gradient(180deg, var(--surf-lo), var(--surf-hi));
+  box-shadow: inset 0 1px 3px var(--sheen-lo);
 }
-.tog input:checked + .tog-track { background: var(--prog); }
+.tog input:checked + .tog-track { background: var(--prog); box-shadow: inset 0 1px 2px rgba(0,0,0,0.25); }
 .tog-thumb {
   position: absolute; top: 2px; left: 2px; width: 20px; height: 20px;
   background: #fff; border-radius: 50%; transition: transform 0.2s; pointer-events: none;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.5);
 }
 .tog input:checked ~ .tog-thumb { transform: translateX(20px); }
 
 .settings-save {
   margin: 16px 20px 20px; width: calc(100% - 40px); background: var(--prog); color: #fff;
   border: none; border-radius: 8px; padding: 12px; font-size: 14px; font-weight: 700;
-  cursor: pointer; font-family: inherit; transition: opacity 0.2s;
+  cursor: pointer; font-family: inherit; transition: filter 0.15s, transform 0.09s;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.25), inset 0 -2px 3px rgba(0,0,0,0.2), 0 2px 6px rgba(0,0,0,0.25);
 }
-.settings-save:hover { opacity: 0.88; }
+.settings-save:hover { filter: brightness(1.06); }
+.settings-save:active { transform: translateY(1px); }
+
+/* ── SETTINGS PANEL: full-window slide-up (id-scoped so the shared About dialog keeps its centered-modal look) ── */
+#settings-ov {
+  background: none; backdrop-filter: none;
+  display: block;            /* always rendered (not none / flex-center) so the panel can slide */
+  pointer-events: none;      /* transparent full-cover wrapper must not block the app while closed */
+}
+#settings-ov.show { pointer-events: auto; }
+#settings-ov .settings-card {
+  position: absolute; inset: 0;
+  width: auto; border: none; border-radius: 0; box-shadow: none;
+  display: flex; flex-direction: column; overflow: hidden;
+  transform: translateY(100%);
+  transition: transform 0.32s cubic-bezier(0.4, 0, 0.2, 1);
+}
+#settings-ov.show .settings-card { transform: translateY(0); }
+#settings-ov .settings-head { justify-content: space-between; padding: 16px 20px; }
+#settings-ov .settings-body {
+  flex: 1; overflow-y: auto; padding: 18px 20px;
+  display: flex; flex-direction: column; gap: 20px;
+}
+#settings-ov .set-group-lab { padding: 0; margin-bottom: 9px; font-size: 10.5px; }
+#settings-ov .set-group-lab:first-of-type { padding-top: 0; }
+#settings-ov .settings-row { margin: 0 0 8px; padding: 13px 16px; gap: 12px; }
+#settings-ov .settings-row:last-child { margin-bottom: 0; }
+#settings-ov .srow-icon svg { width: 17px; height: 17px; }
+#settings-ov .settings-save { margin: 4px 0 0; width: auto; border-radius: 10px; }
 
 .about-actions { display: flex; flex-direction: column; align-items: center; gap: 8px; }
 .about-update-btn {
@@ -471,25 +698,211 @@ body.lyrics-mode .lyr-preview { display: flex; }
 .time-row span, .t-num, .art-overlay span { font-family: var(--mono); font-variant-numeric: tabular-nums; }
 .srow-ctrl select { font-family: var(--mono); color: var(--readout); }
 
-/* ── WHITE THEME OVERRIDES ── */
-[data-theme="white"] .search-box { background: var(--card); border-color: var(--border); }
-[data-theme="white"] .search-box:focus-within { border-color: var(--prog); }
-[data-theme="white"] .modal-card { background: var(--panel); }
-[data-theme="white"] .modal-card input { background: var(--card); color: var(--text); border-color: var(--border); }
-[data-theme="white"] .settings-card { background: var(--panel); }
-[data-theme="white"] .srow-ctrl select { background: var(--card); border-color: var(--border); }
-[data-theme="white"] .ctx-menu { background: var(--panel); }
-[data-theme="white"] .ctx-item:hover { background: var(--card); }
-[data-theme="white"] .bottom-nav { border-top-color: var(--border); box-shadow: 0 -1px 8px rgba(232,73,42,0.10); }
-[data-theme="white"] .pl-actions { border-top-color: var(--border); }
-[data-theme="white"] .toast { background: var(--text); color: var(--bg); }
-[data-theme="white"] .srow-icon { background: var(--card); }
+/* ── WHITE / AMBIENT (light-polarity) THEME OVERRIDES ── */
+[data-theme="white"] .search-box, [data-theme="ambient"] .search-box { background: var(--card); border-color: var(--border); }
+[data-theme="white"] .search-box:focus-within, [data-theme="ambient"] .search-box:focus-within { border-color: var(--prog); }
+[data-theme="white"] .modal-card, [data-theme="ambient"] .modal-card { background: var(--panel); }
+[data-theme="white"] .modal-card input, [data-theme="ambient"] .modal-card input { background: var(--card); color: var(--text); border-color: var(--border); }
+[data-theme="white"] .settings-card, [data-theme="ambient"] .settings-card { background: var(--panel); }
+[data-theme="white"] .ctx-menu, [data-theme="ambient"] .ctx-menu { background: var(--panel); }
+[data-theme="white"] .ctx-item:hover, [data-theme="ambient"] .ctx-item:hover { background: var(--card); }
+[data-theme="white"] .toast, [data-theme="ambient"] .toast { background: var(--text); color: var(--bg); }
+
+/* ══════════════════════════════════════════════════════════════
+   VINTAGE ANALOG CHROME PORT (Ambient + Midnight only)
+   Brass domes / engraved slots / brass-mat frames.
+   Placed last so it wins over the light-polarity overrides above.
+   ══════════════════════════════════════════════════════════════ */
+
+/* ---- toggle switch: engraved recessed OFF track, terracotta gradient ON track, brass dome thumb ---- */
+[data-theme="ambient"] .tog-track, [data-theme="midnight"] .tog-track {
+  background: linear-gradient(180deg, var(--paper-3), var(--paper-2));
+  box-shadow: inset 0 2px 3px var(--sheen-lo), inset 0 -1px 0 var(--sheen-hi), 0 0 0 1px var(--surf-lo);
+}
+[data-theme="ambient"] .tog input:checked + .tog-track, [data-theme="midnight"] .tog input:checked + .tog-track {
+  background: linear-gradient(180deg, var(--prog-hi), var(--prog));
+  box-shadow: inset 0 1px 2px rgba(0,0,0,0.25), 0 0 0 1px var(--surf-lo);
+}
+[data-theme="ambient"] .tog-thumb, [data-theme="midnight"] .tog-thumb {
+  background: radial-gradient(120% 120% at 32% 24%, var(--surf-hi) 0%, var(--surf) 55%, var(--surf-lo) 100%);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.4), inset 0 1px 1px rgba(255,248,224,0.7);
+}
+
+/* ---- transport console: transparent on Graphite/Paper (blends with body), brass plate only on vintage skins ---- */
+.controls {
+  margin-top: 14px; padding: 12px 10px; border-radius: 16px;
+  background: transparent; box-shadow: none;
+}
+[data-theme="ambient"] .controls, [data-theme="midnight"] .controls {
+  background: linear-gradient(180deg, rgba(255,246,224,0.28), rgba(120,88,44,0.12));
+  box-shadow: inset 0 1px 0 rgba(255,246,224,0.5), inset 0 -2px 4px rgba(80,56,22,0.18), 0 1px 0 var(--sheen-hi);
+}
+
+/* ---- window control buttons: small brass dome buttons ---- */
+[data-theme="ambient"] .win-btn, [data-theme="midnight"] .win-btn {
+  color: #241608;
+  background: radial-gradient(120% 120% at 32% 24%, var(--surf-hi) 0%, var(--surf) 55%, var(--surf-lo) 100%);
+  box-shadow:
+    inset 0 1px 1px rgba(255,248,224,0.8),
+    inset 0 -2px 3px rgba(70,48,16,0.55),
+    0 2px 3px rgba(40,26,8,0.4),
+    0 0 0 1px var(--surf-lo);
+}
+[data-theme="ambient"] .win-btn:hover, [data-theme="midnight"] .win-btn:hover {
+  color: #241608; filter: brightness(1.05);
+  background: radial-gradient(120% 120% at 32% 24%, var(--surf-hi) 0%, var(--surf) 55%, var(--surf-lo) 100%);
+}
+[data-theme="ambient"] .win-btn:active, [data-theme="midnight"] .win-btn:active {
+  transform: translateY(1px); filter: none;
+  box-shadow: inset 0 2px 3px rgba(70,48,16,0.75), 0 0 0 1px var(--surf-lo);
+}
+[data-theme="ambient"] #btn-close:hover, [data-theme="midnight"] #btn-close:hover {
+  color: #fff;
+  background: radial-gradient(120% 120% at 32% 24%, #E08A6E 0%, #B5432B 60%, #6E5024 100%);
+}
+
+/* ---- search bar: pressed-into-paper engraved slot ---- */
+[data-theme="ambient"] .search-box, [data-theme="midnight"] .search-box {
+  padding: 10px 14px; border-radius: 10px;
+  background: linear-gradient(180deg, var(--paper-3), var(--paper-2)); border-color: transparent;
+  box-shadow: inset 0 2px 3px var(--sheen-lo), inset 0 -1px 0 var(--sheen-hi), 0 1px 0 var(--sheen-hi);
+}
+[data-theme="ambient"] .search-box:focus-within, [data-theme="midnight"] .search-box:focus-within {
+  background: var(--card); border-color: transparent;
+  box-shadow: inset 0 2px 4px var(--sheen-lo), inset 0 -1px 0 var(--sheen-hi), 0 0 0 1px var(--prog);
+}
+/* ---- Ctrl+K kbd chip: fixed dark engraved text on brass, warm literal highlights (not theme text) ---- */
+[data-theme="ambient"] .search-box .kbd, [data-theme="midnight"] .search-box .kbd {
+  color: #4a3410; padding: 3px 7px; letter-spacing: 0.03em;
+  box-shadow: inset 0 1px 0 rgba(255,246,220,0.6), 0 1px 2px rgba(60,40,12,0.4);
+}
+
+/* ---- album art: brass mat/frame around the artwork ---- */
+[data-theme="ambient"] .art-wrap, [data-theme="midnight"] .art-wrap {
+  padding: 7px;
+  background: linear-gradient(145deg, var(--surf-hi) 0%, var(--surf) 40%, var(--surf-lo) 100%);
+  box-shadow:
+    0 16px 30px -12px rgba(40,26,8,0.7),
+    inset 0 1px 1px rgba(255,246,220,0.7),
+    0 0 0 1px var(--surf-lo);
+}
+[data-theme="ambient"] .album-art, [data-theme="midnight"] .album-art {
+  border-radius: 8px;
+  box-shadow: inset 0 0 0 1px rgba(50,32,10,0.5), inset 0 2px 8px rgba(30,18,6,0.4);
+}
+/* ---- bitrate badge: brass chip with fixed dark text on vintage skins (dark glass only on flat skins) ---- */
+[data-theme="ambient"] .art-badge, [data-theme="midnight"] .art-badge {
+  color: #3a2a10; font-weight: 700; backdrop-filter: none;
+  background: linear-gradient(180deg, var(--surf-hi), var(--surf));
+  box-shadow: inset 0 1px 0 rgba(255,246,220,0.6), 0 1px 2px rgba(0,0,0,0.4);
+}
+
+/* ---- progress gauge: engraved channel + tick marks + dome sphere handle + distressed fill (all themes) ---- */
+.progress-bar {
+  height: 12px; border-radius: 7px; background: linear-gradient(180deg, var(--paper-3), var(--paper-2));
+  box-shadow: inset 0 2px 4px var(--sheen-lo), inset 0 -1px 0 var(--sheen-hi), 0 1px 0 var(--sheen-hi);
+}
+.progress-fill {
+  top: 2px; height: calc(100% - 4px); margin-left: 2px; border-radius: 6px;
+  background: repeating-linear-gradient(90deg, var(--prog) 0px, var(--prog) 5px, var(--prog-hi) 5px, var(--prog-hi) 6px);
+  box-shadow: inset 0 1px 1px rgba(255,220,180,0.4), 0 0 6px -1px var(--prog);
+}
+.ticks {
+  display: flex; position: absolute; inset: 0 8px; justify-content: space-between; align-items: center; pointer-events: none;
+}
+.ticks span { width: 1px; height: 5px; background: var(--sheen-lo); opacity: 0.5; }
+.progress-fill::after {
+  opacity: 1; right: -8px; top: -4px; width: 20px; height: 20px;
+  background:
+    radial-gradient(circle at 30% 22%, rgba(255,252,238,0.95) 0%, rgba(255,252,238,0) 22%),
+    radial-gradient(circle at 34% 28%, var(--surf-hi) 0%, var(--surf) 42%, var(--surf-lo) 96%);
+  box-shadow: inset 0 1px 1px rgba(255,248,224,0.9), inset 0 -2px 3px rgba(60,40,12,0.7), 0 3px 6px rgba(30,18,6,0.6), 0 0 0 1px var(--surf-lo);
+}
+.progress-wrap:hover .progress-fill::after { opacity: 1; }
+
+/* ---- track-list rows: 3-tier warm-glass per mockup — idle subdued (receded), hover == idle,
+       playing = full warm-glass + accent glow. Warm rgba constants shared across all 4 skins. ---- */
+.track-item {
+  gap: 12px; padding: 8px 10px; border-radius: 10px;
+  margin-bottom: 6px; min-height: 58px; position: relative;
+  background: linear-gradient(180deg, rgba(255,246,224,0.07), rgba(120,88,44,0.035));
+  box-shadow: inset 0 1px 0 rgba(255,246,224,0.10);
+  transition: background .18s ease, box-shadow .18s ease;
+}
+.track-item:hover {
+  background: linear-gradient(180deg, rgba(255,246,224,0.07), rgba(120,88,44,0.035));
+  box-shadow: inset 0 1px 0 rgba(255,246,224,0.10);
+}
+.track-item.playing {
+  background: linear-gradient(180deg, rgba(255,246,224,0.44), rgba(120,88,44,0.17));
+  box-shadow: inset 0 1px 0 rgba(255,246,224,0.55), 0 2px 6px rgba(60,42,18,0.28), 0 0 14px -2px var(--prog);
+}
+.t-thumb {
+  box-shadow: inset 0 0 0 1px rgba(30,18,6,0.5), 0 0 0 2px var(--surf), 0 0 0 3px var(--surf-lo);
+}
+
+/* ---- search results: same raised card + brass-framed thumb ---- */
+[data-theme="ambient"] .s-item, [data-theme="midnight"] .s-item {
+  margin-bottom: 6px;
+  background: linear-gradient(180deg, var(--sheen-hi), transparent 60%), var(--card);
+  box-shadow: inset 0 1px 0 var(--sheen-hi), inset 0 -1px 3px var(--sheen-lo);
+}
+[data-theme="ambient"] .s-item:hover, [data-theme="midnight"] .s-item:hover {
+  background: linear-gradient(180deg, var(--sheen-hi), transparent 60%), var(--active-tr);
+}
+[data-theme="ambient"] .s-thumb, [data-theme="midnight"] .s-thumb {
+  box-shadow: inset 0 0 0 1px rgba(30,18,6,0.5), 0 0 0 2px var(--surf), 0 0 0 3px var(--surf-lo);
+}
+
+/* ---- playlists view cards: raised brass cards ---- */
+[data-theme="ambient"] .pl-card, [data-theme="midnight"] .pl-card {
+  background: linear-gradient(180deg, var(--sheen-hi), transparent 60%), var(--card);
+  box-shadow: inset 0 1px 0 var(--sheen-hi), inset 0 -1px 3px var(--sheen-lo);
+}
+[data-theme="ambient"] .pl-card:hover, [data-theme="midnight"] .pl-card:hover {
+  background: linear-gradient(180deg, var(--sheen-hi), transparent 60%), var(--active-tr);
+}
+
+/* ---- brand K medallion: keep the mockup's constant red badge in both vintage themes ---- */
+[data-theme="ambient"] .brand-mark, [data-theme="midnight"] .brand-mark {
+  background: linear-gradient(150deg, #FF5C3D, #C8341C);
+  box-shadow: 0 2px 8px -1px rgba(255,92,61,0.5);
+}
+
+/* ---- settings save: terracotta gradient button (accent-hi -> accent) ---- */
+[data-theme="ambient"] .settings-save, [data-theme="midnight"] .settings-save {
+  background: linear-gradient(145deg, var(--prog-hi) 0%, var(--prog) 100%);
+  box-shadow: 0 8px 18px -9px var(--prog), inset 0 1px 0 rgba(255,255,255,0.3);
+}
+
+/* ---- settings select: engraved paper field with brass edge (not a brass button) ---- */
+[data-theme="ambient"] .srow-ctrl select, [data-theme="midnight"] .srow-ctrl select {
+  background: var(--bg); border: 1px solid var(--surf-lo); border-radius: 7px;
+  padding: 6px 10px; color: var(--text); font-family: var(--disp, var(--sans));
+  box-shadow: inset 0 1px 2px var(--sheen-lo);
+}
+
+/* ---- settings rows: subtle translucent warm cards (theme-independent constants, per mockup) ---- */
+[data-theme="ambient"] .settings-row, [data-theme="midnight"] .settings-row {
+  background: linear-gradient(180deg, rgba(255,246,224,0.22), rgba(120,88,44,0.08));
+  box-shadow: inset 0 1px 0 rgba(255,246,224,0.4), inset 0 -1px 3px rgba(80,56,22,0.14);
+}
+
+/* ---- srow icon squares: subtle translucent tile, not a metallic brass dome ---- */
+[data-theme="ambient"] .srow-icon, [data-theme="midnight"] .srow-icon {
+  width: 34px; height: 34px; border-radius: 9px;
+  background: linear-gradient(180deg, rgba(255,246,224,0.35), rgba(120,88,44,0.1));
+  box-shadow: inset 0 1px 0 rgba(255,246,224,0.5), inset 0 -1px 2px rgba(80,56,22,0.18), 0 0 0 1px var(--border);
+}
+
+/* ---- section labels: muted ink, not accent-colored, per mockup ---- */
+[data-theme="ambient"] .set-group-lab, [data-theme="midnight"] .set-group-lab { color: var(--text3); }
 </style>
 </head>
 <body>
 
 <div class="header">
-  <div class="app-title">
+  <div class="app-title" id="app-title" title="더블클릭하면 세로로 꽉 채워요">
     <span class="brand-mark">K</span>
     <span class="brand-word">Music <span class="sub">Player</span></span>
   </div>
@@ -525,11 +938,11 @@ body.lyrics-mode .lyr-preview { display: flex; }
     <div class="track-channel" id="track-ch">—</div>
 
     <div class="vu paused" id="vu">
-      <i style="animation-delay:0s"></i><i style="animation-delay:.15s"></i><i style="animation-delay:.3s"></i><i style="animation-delay:.1s"></i><i style="animation-delay:.4s"></i><i style="animation-delay:.25s"></i><i style="animation-delay:.05s"></i><i style="animation-delay:.35s"></i>
+      <div class="meter-scale"><span>-20</span><span>-10</span><span>-5</span><span>0</span><span>+3</span><span>+6</span></div><div class="meter-dots"><div class="col" style="--d:0.0s"><b></b><b></b><b style="opacity:.18"></b><b style="opacity:.18"></b><b style="opacity:.18"></b><b style="opacity:.18"></b><b style="opacity:.18"></b><b style="opacity:.18"></b></div><div class="col" style="--d:0.09s"><b></b><b></b><b></b><b style="opacity:.18"></b><b style="opacity:.18"></b><b style="opacity:.18"></b><b style="opacity:.18"></b><b style="opacity:.18"></b></div><div class="col" style="--d:0.18s"><b></b><b></b><b></b><b></b><b style="opacity:.18"></b><b style="opacity:.18"></b><b style="opacity:.18"></b><b style="opacity:.18"></b></div><div class="col" style="--d:0.27s"><b></b><b></b><b></b><b></b><b style="opacity:.18"></b><b style="opacity:.18"></b><b style="opacity:.18"></b><b style="opacity:.18"></b></div><div class="col" style="--d:0.36s"><b></b><b></b><b></b><b></b><b></b><b style="opacity:.18"></b><b style="opacity:.18"></b><b style="opacity:.18"></b></div><div class="col" style="--d:0.45s"><b></b><b></b><b></b><b></b><b></b><b class="lit"></b><b style="opacity:.18"></b><b style="opacity:.18"></b></div><div class="col" style="--d:0.54s"><b></b><b></b><b></b><b></b><b style="opacity:.18"></b><b style="opacity:.18"></b><b style="opacity:.18"></b><b style="opacity:.18"></b></div><div class="col" style="--d:0.63s"><b></b><b></b><b></b><b></b><b></b><b></b><b class="lit"></b><b style="opacity:.18"></b></div><div class="col" style="--d:0.72s"><b></b><b></b><b></b><b></b><b></b><b style="opacity:.18"></b><b style="opacity:.18"></b><b style="opacity:.18"></b></div><div class="col" style="--d:0.81s"><b></b><b></b><b></b><b></b><b></b><b></b><b class="lit"></b><b style="opacity:.18"></b></div><div class="col" style="--d:0.9s"><b></b><b></b><b></b><b></b><b></b><b class="lit"></b><b style="opacity:.18"></b><b style="opacity:.18"></b></div><div class="col" style="--d:0.99s"><b></b><b></b><b></b><b></b><b></b><b></b><b></b><b class="lit"></b></div><div class="col" style="--d:1.08s"><b></b><b></b><b></b><b></b><b></b><b></b><b class="lit"></b><b style="opacity:.18"></b></div><div class="col" style="--d:1.17s"><b></b><b></b><b></b><b></b><b></b><b style="opacity:.18"></b><b style="opacity:.18"></b><b style="opacity:.18"></b></div><div class="col" style="--d:1.26s"><b></b><b></b><b></b><b></b><b></b><b></b><b class="lit"></b><b style="opacity:.18"></b></div><div class="col" style="--d:0.05s"><b></b><b></b><b></b><b></b><b></b><b class="lit"></b><b style="opacity:.18"></b><b style="opacity:.18"></b></div><div class="col" style="--d:0.14s"><b></b><b></b><b></b><b></b><b style="opacity:.18"></b><b style="opacity:.18"></b><b style="opacity:.18"></b><b style="opacity:.18"></b></div><div class="col" style="--d:0.23s"><b></b><b></b><b></b><b></b><b></b><b></b><b class="lit"></b><b style="opacity:.18"></b></div><div class="col" style="--d:0.32s"><b></b><b></b><b></b><b></b><b></b><b style="opacity:.18"></b><b style="opacity:.18"></b><b style="opacity:.18"></b></div><div class="col" style="--d:0.41s"><b></b><b></b><b></b><b></b><b style="opacity:.18"></b><b style="opacity:.18"></b><b style="opacity:.18"></b><b style="opacity:.18"></b></div><div class="col" style="--d:0.5s"><b></b><b></b><b></b><b></b><b></b><b class="lit"></b><b style="opacity:.18"></b><b style="opacity:.18"></b></div><div class="col" style="--d:0.59s"><b></b><b></b><b></b><b></b><b style="opacity:.18"></b><b style="opacity:.18"></b><b style="opacity:.18"></b><b style="opacity:.18"></b></div><div class="col" style="--d:0.68s"><b></b><b></b><b></b><b></b><b></b><b style="opacity:.18"></b><b style="opacity:.18"></b><b style="opacity:.18"></b></div><div class="col" style="--d:0.77s"><b></b><b></b><b></b><b></b><b style="opacity:.18"></b><b style="opacity:.18"></b><b style="opacity:.18"></b><b style="opacity:.18"></b></div><div class="col" style="--d:0.86s"><b></b><b></b><b></b><b style="opacity:.18"></b><b style="opacity:.18"></b><b style="opacity:.18"></b><b style="opacity:.18"></b><b style="opacity:.18"></b></div><div class="col" style="--d:0.95s"><b></b><b></b><b></b><b></b><b style="opacity:.18"></b><b style="opacity:.18"></b><b style="opacity:.18"></b><b style="opacity:.18"></b></div><div class="col" style="--d:1.04s"><b></b><b></b><b></b><b></b><b style="opacity:.18"></b><b style="opacity:.18"></b><b style="opacity:.18"></b><b style="opacity:.18"></b></div><div class="col" style="--d:1.13s"><b></b><b></b><b></b><b></b><b></b><b style="opacity:.18"></b><b style="opacity:.18"></b><b style="opacity:.18"></b></div><div class="col" style="--d:1.22s"><b></b><b></b><b></b><b style="opacity:.18"></b><b style="opacity:.18"></b><b style="opacity:.18"></b><b style="opacity:.18"></b><b style="opacity:.18"></b></div><div class="col" style="--d:0.01s"><b></b><b></b><b style="opacity:.18"></b><b style="opacity:.18"></b><b style="opacity:.18"></b><b style="opacity:.18"></b><b style="opacity:.18"></b><b style="opacity:.18"></b></div><div class="col" style="--d:0.1s"><b></b><b></b><b></b><b></b><b style="opacity:.18"></b><b style="opacity:.18"></b><b style="opacity:.18"></b><b style="opacity:.18"></b></div><div class="col" style="--d:0.19s"><b></b><b></b><b></b><b style="opacity:.18"></b><b style="opacity:.18"></b><b style="opacity:.18"></b><b style="opacity:.18"></b><b style="opacity:.18"></b></div><div class="col" style="--d:0.28s"><b></b><b></b><b></b><b></b><b style="opacity:.18"></b><b style="opacity:.18"></b><b style="opacity:.18"></b><b style="opacity:.18"></b></div><div class="col" style="--d:0.37s"><b></b><b></b><b style="opacity:.18"></b><b style="opacity:.18"></b><b style="opacity:.18"></b><b style="opacity:.18"></b><b style="opacity:.18"></b><b style="opacity:.18"></b></div><div class="col" style="--d:0.46s"><b></b><b style="opacity:.18"></b><b style="opacity:.18"></b><b style="opacity:.18"></b><b style="opacity:.18"></b><b style="opacity:.18"></b><b style="opacity:.18"></b><b style="opacity:.18"></b></div><div class="col" style="--d:0.55s"><b></b><b></b><b></b><b style="opacity:.18"></b><b style="opacity:.18"></b><b style="opacity:.18"></b><b style="opacity:.18"></b><b style="opacity:.18"></b></div><div class="col" style="--d:0.64s"><b></b><b></b><b style="opacity:.18"></b><b style="opacity:.18"></b><b style="opacity:.18"></b><b style="opacity:.18"></b><b style="opacity:.18"></b><b style="opacity:.18"></b></div><div class="col" style="--d:0.73s"><b></b><b></b><b></b><b></b><b style="opacity:.18"></b><b style="opacity:.18"></b><b style="opacity:.18"></b><b style="opacity:.18"></b></div><div class="col" style="--d:0.82s"><b></b><b></b><b style="opacity:.18"></b><b style="opacity:.18"></b><b style="opacity:.18"></b><b style="opacity:.18"></b><b style="opacity:.18"></b><b style="opacity:.18"></b></div><div class="col" style="--d:0.91s"><b></b><b style="opacity:.18"></b><b style="opacity:.18"></b><b style="opacity:.18"></b><b style="opacity:.18"></b><b style="opacity:.18"></b><b style="opacity:.18"></b><b style="opacity:.18"></b></div></div>
     </div>
 
     <div class="progress-wrap">
-      <div class="progress-bar" id="prog-bar"><div class="progress-fill" id="prog-fill"></div></div>
+      <div class="progress-bar" id="prog-bar"><div class="progress-fill" id="prog-fill"></div><div class="ticks"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div></div>
       <div class="time-row"><span id="t-cur">0:00</span><span id="t-tot">0:00</span></div>
     </div>
 
@@ -539,14 +952,14 @@ body.lyrics-mode .lyr-preview { display: flex; }
             <polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/>
             <polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>
           </svg>
-          <span class="repeat-badge" style="display:none;position:absolute;top:-4px;right:-6px;width:14px;height:14px;border-radius:50%;background:var(--prog);color:#000;font-size:9px;font-weight:800;align-items:center;justify-content:center;">1</span>
+          <span class="repeat-badge" style="display:none;position:absolute;top:-4px;right:-6px;width:14px;height:14px;border-radius:50%;background:var(--prog);font-size:9px;font-weight:800;align-items:center;justify-content:center;">1</span>
         </button>
         <button class="ctrl-btn skip" id="btn-prev" title="이전 곡">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z"/></svg>
         </button>
         <button class="ctrl-btn play" id="btn-play">
           <svg id="icon-play" width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
-          <svg id="icon-pause" width="24" height="24" viewBox="0 0 24 24" fill="currentColor" style="display:none"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+          <svg id="icon-pause" width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
         </button>
         <button class="ctrl-btn skip" id="btn-next" title="다음 곡">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>
@@ -561,7 +974,11 @@ body.lyrics-mode .lyr-preview { display: flex; }
 
     <div class="vol-row">
       <span class="vol-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg></span>
-      <input type="range" class="vol" id="vol" min="0" max="100" value="80"/>
+      <div class="vol-track" id="vol-track">
+        <div class="vol-fill" id="vol-fill"></div>
+        <div class="vol-knob" id="vol-knob"></div>
+        <input type="range" class="vol" id="vol" min="0" max="100" value="80"/>
+      </div>
       <span class="vol-pct" id="vol-pct">80</span>
     </div>
     </div>
@@ -613,61 +1030,71 @@ body.lyrics-mode .lyr-preview { display: flex; }
 <div class="settings-overlay" id="settings-ov">
   <div class="settings-card">
     <div class="settings-head">
-      <h2>설정</h2>
+      <h2>Settings</h2>
       <button class="settings-close" id="settings-close"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
     </div>
-    <div class="set-group-lab">오디오</div>
-    <div class="settings-row">
-      <div class="srow-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 14h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7a9 9 0 0 1 18 0v7a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3"/></svg></div>
-      <div class="srow-text"><div class="srow-label">음질 설정</div><div class="srow-sub">스트리밍 비트레이트 · 128/192/320k</div></div>
-      <div class="srow-ctrl">
-        <select id="cfg-quality">
-          <option value="128">128k</option>
-          <option value="192" selected>192k</option>
-          <option value="320">320k</option>
-        </select>
+    <div class="settings-body">
+      <div>
+        <div class="set-group-lab">오디오</div>
+        <div class="settings-row">
+          <div class="srow-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 14h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7a9 9 0 0 1 18 0v7a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3"/></svg></div>
+          <div class="srow-text"><div class="srow-label">음질 설정</div><div class="srow-sub">스트리밍 비트레이트 · 128/192/320k</div></div>
+          <div class="srow-ctrl">
+            <select id="cfg-quality">
+              <option value="128">128k</option>
+              <option value="192" selected>192k</option>
+              <option value="320">320k</option>
+            </select>
+          </div>
+        </div>
       </div>
-    </div>
-    <div class="set-group-lab">재생</div>
-    <div class="settings-row">
-      <div class="srow-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 3 20 12 6 21 6 3"/></svg></div>
-      <div class="srow-text"><div class="srow-label">자동 재생</div><div class="srow-sub" id="auto-sub">꺼짐</div></div>
-      <label class="tog">
-        <input type="checkbox" id="cfg-auto"/>
-        <div class="tog-track"></div>
-        <div class="tog-thumb"></div>
-      </label>
-    </div>
-    <div class="settings-row">
-      <div class="srow-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div>
-      <div class="srow-text"><div class="srow-label">마지막 곡 이어듣기</div><div class="srow-sub">앱 시작 시</div></div>
-      <label class="tog">
-        <input type="checkbox" id="cfg-resume"/>
-        <div class="tog-track"></div>
-        <div class="tog-thumb"></div>
-      </label>
-    </div>
-    <div class="set-group-lab">시스템</div>
-    <div class="settings-row">
-      <div class="srow-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3m0 14v3M4.22 4.22l2.12 2.12m11.32 11.32 2.12 2.12M2 12h3m14 0h3M4.22 19.78l2.12-2.12M17.66 6.34l2.12-2.12"/></svg></div>
-      <div class="srow-text"><div class="srow-label">스킨</div><div class="srow-sub">그래파이트 다크 / 페이퍼 라이트</div></div>
-      <div class="srow-ctrl">
-        <select id="cfg-theme">
-          <option value="default">기본 (그래파이트)</option>
-          <option value="white">라이트 (페이퍼)</option>
-        </select>
+      <div>
+        <div class="set-group-lab">재생</div>
+        <div class="settings-row">
+          <div class="srow-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 3 20 12 6 21 6 3"/></svg></div>
+          <div class="srow-text"><div class="srow-label">자동 재생</div><div class="srow-sub" id="auto-sub">꺼짐</div></div>
+          <label class="tog">
+            <input type="checkbox" id="cfg-auto"/>
+            <div class="tog-track"></div>
+            <div class="tog-thumb"></div>
+          </label>
+        </div>
+        <div class="settings-row">
+          <div class="srow-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div>
+          <div class="srow-text"><div class="srow-label">마지막 곡 이어듣기</div><div class="srow-sub">앱 시작 시</div></div>
+          <label class="tog">
+            <input type="checkbox" id="cfg-resume"/>
+            <div class="tog-track"></div>
+            <div class="tog-thumb"></div>
+          </label>
+        </div>
       </div>
+      <div>
+        <div class="set-group-lab">시스템</div>
+        <div class="settings-row">
+          <div class="srow-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3m0 14v3M4.22 4.22l2.12 2.12m11.32 11.32 2.12 2.12M2 12h3m14 0h3M4.22 19.78l2.12-2.12M17.66 6.34l2.12-2.12"/></svg></div>
+          <div class="srow-text"><div class="srow-label">스킨</div><div class="srow-sub">그래파이트 / 페이퍼 / 빈티지 Ambient·Midnight</div></div>
+          <div class="srow-ctrl">
+            <select id="cfg-theme">
+              <option value="default">기본 (그래파이트)</option>
+              <option value="white">라이트 (페이퍼)</option>
+              <option value="ambient">빈티지 (Ambient)</option>
+              <option value="midnight">빈티지 (Midnight)</option>
+            </select>
+          </div>
+        </div>
+        <div class="settings-row">
+          <div class="srow-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/></svg></div>
+          <div class="srow-text"><div class="srow-label">시작 프로그램 등록</div><div class="srow-sub">Windows 시작 시 자동 실행</div></div>
+          <label class="tog">
+            <input type="checkbox" id="cfg-startup"/>
+            <div class="tog-track"></div>
+            <div class="tog-thumb"></div>
+          </label>
+        </div>
+      </div>
+      <button class="settings-save" id="settings-save">저장</button>
     </div>
-    <div class="settings-row">
-      <div class="srow-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/></svg></div>
-      <div class="srow-text"><div class="srow-label">시작 프로그램 등록</div><div class="srow-sub">Windows 시작 시 자동 실행</div></div>
-      <label class="tog">
-        <input type="checkbox" id="cfg-startup"/>
-        <div class="tog-track"></div>
-        <div class="tog-thumb"></div>
-      </label>
-    </div>
-    <button class="settings-save" id="settings-save">저장</button>
   </div>
 </div>
 
