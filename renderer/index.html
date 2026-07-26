@@ -114,21 +114,23 @@
 }
 [data-theme="ambient"] .track-title, [data-theme="ambient"] .brand-word,
 [data-theme="ambient"] .pl-tab,
-[data-theme="ambient"] .pl-act-btn, [data-theme="ambient"] .search-box input,
+[data-theme="ambient"] .pl-act-btn,
 [data-theme="midnight"] .track-title, [data-theme="midnight"] .brand-word,
 [data-theme="midnight"] .pl-tab,
-[data-theme="midnight"] .pl-act-btn, [data-theme="midnight"] .search-box input {
+[data-theme="midnight"] .pl-act-btn {
   font-family: var(--disp), var(--sans);
 }
-/* Artist/channel name text stays on the plain default (graphite/light) font in
-   the vintage skins too — the italic serif treatment tried here first (Palatino
-   falling back to a Korean serif like Batang on Windows for Hangul, which has no
-   true italic face and gets faux-obliqued into overlapping, illegible strokes;
-   font-synthesis:none was tried and didn't fully resolve it on real hardware) —
-   simplest reliable fix is to just not use the vintage serif for this text at all. */
+/* Artist/channel name text AND the search input stay on the plain default
+   (graphite/light) font in the vintage skins too — the italic serif treatment
+   tried here first (Palatino falling back to a Korean serif like Batang on
+   Windows for Hangul, which has no true italic face and gets faux-obliqued
+   into overlapping, illegible strokes; font-synthesis:none was tried and
+   didn't fully resolve it on real hardware) — simplest reliable fix is to
+   just not use the vintage serif for typed/Hangul-bearing text at all. */
 [data-theme="ambient"] .t-ch, [data-theme="midnight"] .t-ch,
 [data-theme="ambient"] .s-ch, [data-theme="midnight"] .s-ch,
-[data-theme="ambient"] .track-channel, [data-theme="midnight"] .track-channel {
+[data-theme="ambient"] .track-channel, [data-theme="midnight"] .track-channel,
+[data-theme="ambient"] .search-box input, [data-theme="midnight"] .search-box input {
   font-family: var(--sans);
 }
 
