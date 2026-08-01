@@ -210,15 +210,125 @@ function renderTrackList() {
     el.className = 'track-item' + (playing?' playing':'');
     el.innerHTML = `
       <span class="t-num">${numHtml}</span>
-      <img class="t-thumb" src="${esc(t.thumbnail||'')}" onerror="this.style.visibility='hidden'" alt=""/>
+      <img class="t-thumb" src="${esc(t.thumbnail||'')}" onerror="this.style.visibility='hidden'" alt="" draggable="false"/>
       <div class="t-meta"><div class="t-title">${esc(t.title)}</div><div class="t-ch">${esc(t.channel)}</div></div>
       <span class="t-dur">${fmt(t.duration)}</span>
       <button class="t-del" data-i="${i}">🗑</button>
     `;
     el.querySelector('.t-del').onclick = e => { e.stopPropagation(); removeTrack(i); };
-    el.onclick = () => playTrack(i);
     el.oncontextmenu = e => showCtxMenu(e, i);
+    attachTrackDrag(el, i);
     trackList.appendChild(el);
+  });
+}
+
+// ── 재생목록 클릭-드래그 순서 변경 ──────────────────────────────────────────────
+// 클릭만 하면(이동 없음) 기존처럼 재생, 위/아래로 끌면 순서 변경. 버튼 없이 곡 자체를 잡고 옮기는 방식.
+const DRAG_THRESHOLD = 6;
+function attachTrackDrag(el, startIndex) {
+  el.addEventListener('pointerdown', e => {
+    if (e.target.closest('.t-del')) return; // 삭제 버튼은 기존 클릭 동작 그대로
+    if (e.button !== undefined && e.button !== 0) return;
+
+    const items = Array.from(trackList.children);
+    const origTops = items.map(it => it.getBoundingClientRect().top);
+    const itemH = origTops.length > 1 ? (origTops[1] - origTops[0]) : el.getBoundingClientRect().height;
+    const startY = e.clientY;
+    let dragging = false;
+    let curIndex = startIndex;
+
+    function onMove(ev) {
+      const dy = ev.clientY - startY;
+      if (!dragging && Math.abs(dy) > DRAG_THRESHOLD) {
+        dragging = true;
+        el.classList.add('dragging');
+        el.style.position = 'relative';
+        el.style.zIndex = '5';
+        el.style.transition = 'none';
+        el.style.boxShadow = '0 6px 16px rgba(0,0,0,0.35)';
+      }
+      if (!dragging) return;
+      ev.preventDefault();
+      el.style.transform = `translateY(${dy}px)`;
+
+      const draggedCenter = origTops[startIndex] + itemH/2 + dy;
+      let newIndex = startIndex;
+      for (let j = 0; j < items.length; j++) {
+        if (j === startIndex) continue;
+        const slotCenter = origTops[j] + itemH/2;
+        if (j < startIndex && draggedCenter < slotCenter) newIndex = Math.min(newIndex, j);
+        if (j > startIndex && draggedCenter > slotCenter) newIndex = Math.max(newIndex, j);
+      }
+      curIndex = newIndex;
+
+      items.forEach((it, j) => {
+        if (j === startIndex) return;
+        let shift = 0;
+        if (curIndex < startIndex && j >= curIndex && j < startIndex) shift = itemH;
+        else if (curIndex > startIndex && j <= curIndex && j > startIndex) shift = -itemH;
+        it.style.transition = 'transform 0.18s ease';
+        it.style.transform = shift ? `translateY(${shift}px)` : '';
+      });
+    }
+
+    function cleanup() {
+      document.removeEventListener('pointermove', onMove);
+      document.removeEventListener('pointerup', onUp);
+      document.removeEventListener('pointercancel', onCancel);
+    }
+
+    function onCancel() {
+      // 네이티브 드래그(예: 이미지 끌기) 등으로 제스처가 중간에 취소된 경우 —
+      // 재생 트리거 없이 조용히 원상복구만 하고 리스너 정리(안 하면 다음 시도부터 리스너가 계속 쌓임).
+      cleanup();
+      if (!dragging) return;
+      el.classList.remove('dragging');
+      el.style.position = '';
+      el.style.zIndex = '';
+      el.style.boxShadow = '';
+      el.style.transition = '';
+      el.style.transform = '';
+      Array.from(trackList.children).forEach(it => { if (it !== el) { it.style.transition = ''; it.style.transform = ''; } });
+    }
+
+    function onUp() {
+      cleanup();
+
+      if (!dragging) {
+        playTrack(startIndex);
+        return;
+      }
+
+      const items2 = Array.from(trackList.children);
+      el.classList.remove('dragging');
+      el.style.position = '';
+      el.style.zIndex = '';
+      el.style.boxShadow = '';
+      el.style.transition = '';
+      el.style.transform = '';
+      items2.forEach(it => { if (it !== el) { it.style.transition = ''; it.style.transform = ''; } });
+
+      if (curIndex !== startIndex) {
+        const tracks = playlists[currentPl].tracks;
+        const [moved] = tracks.splice(startIndex, 1);
+        tracks.splice(curIndex, 0, moved);
+
+        if (playingPl === currentPl && currentTrack !== -1) {
+          if (currentTrack === startIndex) currentTrack = curIndex;
+          else if (startIndex < currentTrack && curIndex >= currentTrack) currentTrack -= 1;
+          else if (startIndex > currentTrack && curIndex <= currentTrack) currentTrack += 1;
+          // 재생 중 순서를 바꾸면 이어재생용으로 저장해둔 인덱스(lastTrackIdx)도 같이 갱신 안 하면
+          // 다음 실행 때 엉뚱한 곡에서 이어재생됨(오푸스 리뷰 발견, 2026-08-02)
+          saveCfg({ lastTrackIdx: currentTrack });
+        }
+        save();
+        renderTrackList();
+      }
+    }
+
+    document.addEventListener('pointermove', onMove);
+    document.addEventListener('pointerup', onUp);
+    document.addEventListener('pointercancel', onCancel);
   });
 }
 
@@ -285,8 +395,10 @@ async function addByUrl(url, autoplay=false) {
 function removeTrack(i) {
   playlists[currentPl].tracks.splice(i,1);
   if (currentPl===playingPl) {
-    if (currentTrack===i) { currentTrack=-1; playingPl=-1; stopAudio(); }
-    else if (currentTrack>i) currentTrack--;
+    // 재생 중이던 곡이 삭제/이동돼서 인덱스가 바뀌면 이어재생용 저장값(lastTrackIdx)도 같이
+    // 갱신 안 하면 다음 실행 때 엉뚱한 곡에서 이어재생됨(오푸스 리뷰 발견, 2026-08-02)
+    if (currentTrack===i) { currentTrack=-1; playingPl=-1; stopAudio(); saveCfg({lastTrackIdx: -1}); }
+    else if (currentTrack>i) { currentTrack--; saveCfg({lastTrackIdx: currentTrack}); }
   }
   save(); renderTrackList();
 }
@@ -621,6 +733,14 @@ volSlider.onchange = function() { saveCfg({volume:parseInt(this.value)}); };
 // ── search ────────────────────────────────────────────────────────────────────
 document.addEventListener('keydown', e => {
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase()==='k') { e.preventDefault(); $('qs-input').focus(); $('qs-input').select(); }
+
+  const tag = (e.target.tagName || '').toLowerCase();
+  const isTyping = tag === 'input' || tag === 'textarea' || e.target.isContentEditable;
+  const overlayOpen = document.querySelector('.settings-overlay.show, .modal-ov.show, .ctx-menu.show');
+  if (isTyping || overlayOpen) return;
+
+  if (e.code === 'Space') { e.preventDefault(); togglePlay(); }
+  else if (e.key === 'Enter') { e.preventDefault(); window.api.closeApp(); }
 });
 let _searchTimer = null;
 $('qs-input').addEventListener('keydown', e => {
@@ -652,7 +772,7 @@ async function doSearch(q) {
     const el = document.createElement('div');
     el.className='s-item';
     el.innerHTML=`
-      <img class="s-thumb" src="${esc(r.thumbnail||'')}" onerror="this.style.visibility='hidden'" alt=""/>
+      <img class="s-thumb" src="${esc(r.thumbnail||'')}" onerror="this.style.visibility='hidden'" alt="" draggable="false"/>
       <div class="s-meta"><div class="s-title">${esc(r.title)}</div><div class="s-ch">${esc(r.channel)}${r.duration?' · '+fmt(r.duration):''}</div></div>
       <button class="s-add">+ 추가</button>
     `;
@@ -703,14 +823,37 @@ function showCtxMenu(e, idx) {
   _ctxIdx = idx;
   showCtxMain();
   $('ctx-move').style.display = playlists.length > 1 ? '' : 'none';
-  ctxMenu.style.left = Math.min(e.clientX, 400 - 220) + 'px';
-  ctxMenu.style.top  = Math.min(e.clientY, 680 - 60) + 'px';
-  ctxMenu.classList.add('show');
+  ctxMenu.classList.add('show'); // 실제 크기를 재려면 먼저 보이는 상태여야 함 — 같은 틱 안에서 위치까지 잡으니 깜빡임 없음
+
+  const menuW = ctxMenu.offsetWidth;
+  const menuH = ctxMenu.offsetHeight;
+  const vw = document.documentElement.clientWidth;
+  const vh = window.innerHeight;
+
+  // 클릭 지점이 플레이어 가로 중앙보다 왼쪽이면 메뉴의 좌측 하단 모서리를, 오른쪽이면
+  // 우측 하단 모서리를 커서 위치에 맞춰 위쪽으로 펼침(형 요청, 2026-08-02) — 창 밖으로
+  // 잘리지 않게 가로/세로 둘 다 클램프(세로는 창 높이가 채움상태 등으로 커져도 항상 실측값 사용).
+  let left = (e.clientX < vw / 2) ? e.clientX : e.clientX - menuW;
+  let top = e.clientY - menuH;
+
+  left = Math.max(4, Math.min(left, vw - menuW - 4));
+  top = Math.max(4, Math.min(top, vh - menuH - 4));
+
+  ctxMenu.style.left = left + 'px';
+  ctxMenu.style.top = top + 'px';
 }
 $('ctx-del').onclick = (e) => {
   e.stopPropagation();
   hideCtx();
   if (_ctxIdx >= 0) removeTrack(_ctxIdx);
+};
+$('ctx-copy-link').onclick = async (e) => {
+  e.stopPropagation();
+  hideCtx();
+  const track = playlists[currentPl]?.tracks[_ctxIdx];
+  if (!track?.ytUrl) return;
+  await window.api.copyText(track.ytUrl);
+  toast('링크를 복사했습니다');
 };
 
 function moveTrackToPlaylist(idx, targetPlIdx) {
@@ -718,8 +861,14 @@ function moveTrackToPlaylist(idx, targetPlIdx) {
   if (!track) return;
   playlists[targetPlIdx].tracks.push(track);
   if (currentPl===playingPl) {
-    if (currentTrack === idx) { currentTrack = -1; stopAudio(); }
-    else if (currentTrack > idx) currentTrack--;
+    if (currentTrack === idx) {
+      // 지금 재생 중인 곡 자체를 다른 목록으로 옮기는 경우 — 끊지 않고 그대로 재생 유지,
+      // 재생 위치만 새 플레이리스트/인덱스로 갱신(형 요청, 2026-08-02)
+      playingPl = targetPlIdx;
+      currentTrack = playlists[targetPlIdx].tracks.length - 1;
+      saveCfg({ lastPlId: playlists[targetPlIdx].id, lastTrackIdx: currentTrack });
+    }
+    else if (currentTrack > idx) { currentTrack--; saveCfg({lastTrackIdx: currentTrack}); }
   }
   save(); renderTrackList(); renderTabs();
 }

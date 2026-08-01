@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, shell, Tray, Menu, nativeImage, screen } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, Tray, Menu, nativeImage, screen, clipboard } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const path = require('path');
 const fs = require('fs');
@@ -239,6 +239,7 @@ async function searchYoutube(query, limit = 10) {
 
 let mainWin = null;
 let settingsWin = null;
+let tabWin = null;
 let tray = null;
 let forceQuit = false;
 
@@ -287,25 +288,121 @@ function createTray() {
   tray = new Tray(getTrayIcon());
   tray.setToolTip('K-Music Player');
   const menu = Menu.buildFromTemplate([
-    { label: '열기', click: () => { mainWin?.show(); mainWin?.focus(); } },
+    { label: '열기', click: () => { mainWin?.show(); mainWin?.focus(); moveTabBeside(); } },
     { type: 'separator' },
-    { label: '설정', click: () => { mainWin?.show(); mainWin?.focus(); mainWin?.webContents.send('open-settings'); } },
-    { label: '프로그램 정보', click: () => { mainWin?.show(); mainWin?.focus(); mainWin?.webContents.send('open-about'); } },
+    { label: '설정', click: () => { mainWin?.show(); mainWin?.focus(); moveTabBeside(); mainWin?.webContents.send('open-settings'); } },
+    { label: '프로그램 정보', click: () => { mainWin?.show(); mainWin?.focus(); moveTabBeside(); mainWin?.webContents.send('open-about'); } },
     { type: 'separator' },
     { label: '프로그램 종료', click: () => { forceQuit = true; app.quit(); } }
   ]);
   tray.setContextMenu(menu);
-  tray.on('double-click', () => { mainWin?.show(); mainWin?.focus(); });
-  tray.on('click', () => { mainWin?.show(); mainWin?.focus(); });
+  tray.on('double-click', () => { mainWin?.show(); mainWin?.focus(); moveTabBeside(); });
+  tray.on('click', () => { mainWin?.show(); mainWin?.focus(); moveTabBeside(); });
 }
 
+// ── 화면 옆 엣지탭 (창 왼쪽 도킹 기본값 기준, 창 오른쪽 가장자리에 붙는 탭) ──────────
+const TAB_W = 26, TAB_H = 104;
+
+const MAIN_MIN_HEIGHT = 884; // createMainWindow()의 minHeight와 동일
+
+// 라벨을 위아래로 드래그해서 옮길 수 있는 범위 — 지금 창 높이가 얼마든 상관없이,
+// 창을 최소 높이로 줄였을 때도 라벨이 창 밖으로 벗어나지 않도록 그 기준으로 제한.
+function clampTabOffset(offset) {
+  const maxOffset = Math.max(0, (MAIN_MIN_HEIGHT - TAB_H) / 2);
+  return Math.max(-maxOffset, Math.min(maxOffset, offset));
+}
+
+function getTabPos(offsetOverride) {
+  const wa = screen.getPrimaryDisplay().workArea;
+  const offset = clampTabOffset(offsetOverride != null ? offsetOverride : (loadConfig().tabOffsetY || 0));
+  const b = mainWin && !mainWin.isDestroyed() ? mainWin.getBounds() : null;
+  let x;
+  if (mainWin && !mainWin.isDestroyed() && mainWin.isVisible()) {
+    x = b.x + b.width;
+  } else {
+    x = wa.x; // 창이 숨겨지면 화면 실제 가장자리로 바짝 붙음
+  }
+  const winY = b ? b.y : wa.y;
+  const winHeight = b ? b.height : MAIN_MIN_HEIGHT;
+  const y = Math.round(winY + winHeight / 2 - TAB_H / 2 + offset);
+  return { x, y };
+}
+
+function createTabWindow() {
+  const { x, y } = getTabPos();
+  tabWin = new BrowserWindow({
+    x, y, width: TAB_W, height: TAB_H,
+    frame: false, transparent: true, backgroundColor: '#00000000',
+    focusable: false,
+    // 항상위 여부는 mainWin과 항상 같은 값으로 맞춤 — 안 그러면 mainWin이 항상위가 아닐 때
+    // 다른 창에 포커스가 가서 mainWin은 뒤로 숨어도 탭만 계속 맨 위에 떠서 따로 노는 것처럼 보임.
+    alwaysOnTop: !!loadConfig().alwaysOnTop, skipTaskbar: true, resizable: false,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true, nodeIntegration: false,
+    }
+  });
+  tabWin.loadFile('renderer/tab.html');
+  tabWin.setVisibleOnAllWorkspaces(true);
+  tabWin.webContents.once('did-finish-load', () => {
+    tabWin?.webContents.send('set-theme', loadConfig().theme || 'default');
+  });
+}
+
+function moveTabBeside(offsetOverride) {
+  if (!tabWin || tabWin.isDestroyed()) return;
+  const { x, y } = getTabPos(offsetOverride);
+  tabWin.setPosition(x, y);
+}
+
+let tabDragStartOffset = null;
+ipcMain.handle('tab-drag-start', () => {
+  tabDragStartOffset = loadConfig().tabOffsetY || 0;
+});
+ipcMain.handle('tab-drag-move', (_, dy) => {
+  if (tabDragStartOffset == null) return;
+  moveTabBeside(tabDragStartOffset + (dy || 0));
+});
+ipcMain.handle('tab-drag-end', (_, dy) => {
+  if (tabDragStartOffset == null) return;
+  const finalOffset = clampTabOffset(tabDragStartOffset + (dy || 0));
+  saveConfig({ ...loadConfig(), tabOffsetY: finalOffset });
+  tabDragStartOffset = null;
+  moveTabBeside(finalOffset);
+});
+
+ipcMain.handle('toggle-main-window', () => {
+  if (mainWin?.isVisible()) {
+    mainWin.hide();
+  } else {
+    mainWin?.show();
+    mainWin?.focus();
+  }
+  moveTabBeside();
+  return true;
+});
+
 function createMainWindow() {
-  const savedHeight = loadConfig().windowHeight;
+  const cfg0 = loadConfig();
+  const savedHeight = cfg0.windowHeight;
   const maxUsableHeight = screen.getPrimaryDisplay().workAreaSize.height;
   const validSaved = typeof savedHeight === 'number' && savedHeight >= 884 && savedHeight <= maxUsableHeight;
+
+  // 종료 시점 위치 복원 — 그 사이 모니터 구성이 바뀌어 화면 밖으로 나갈 좌표면 무시하고 기본(가운데) 위치 사용.
+  const savedX = cfg0.windowX, savedY = cfg0.windowY;
+  let posOpts = {};
+  if (typeof savedX === 'number' && typeof savedY === 'number') {
+    const onScreen = screen.getAllDisplays().some(d => (
+      savedX >= d.bounds.x - 50 && savedX < d.bounds.x + d.bounds.width &&
+      savedY >= d.bounds.y - 50 && savedY < d.bounds.y + d.bounds.height
+    ));
+    if (onScreen) posOpts = { x: savedX, y: savedY };
+  }
+
   mainWin = new BrowserWindow({
     width: 400,
     height: validSaved ? savedHeight : 884,
+    ...posOpts,
     minHeight: 884,
     minWidth: 400,
     maxWidth: 400,
@@ -348,6 +445,9 @@ function createMainWindow() {
       const wa = screen.getDisplayMatching(cur).workArea;
       preFillBounds = cur;
       filled = true;
+      // 채움 상태에선 move/resize 핸들러가 저장을 건너뛰므로, 채우기 직전의 "일반" 위치/높이를
+      // 여기서 한 번 명시적으로 저장해둠 — 채운 채로 종료해도 다음 실행 때 채운 상태로 복원 가능.
+      saveConfig({ ...loadConfig(), windowFilled: true, windowX: cur.x, windowY: cur.y, windowHeight: cur.height });
       animateBounds(cur, { x: wa.x, y: wa.y, width: 400, height: wa.height });
     } else {
       // Restore branch: go back to exactly where we were before filling.
@@ -355,9 +455,12 @@ function createMainWindow() {
       const restoreTo = preFillBounds || cur;
       preFillBounds = null;
       filled = false;
+      saveConfig({ ...loadConfig(), windowFilled: false, windowX: restoreTo.x, windowY: restoreTo.y, windowHeight: restoreTo.height });
       animateBounds(cur, restoreTo);
     }
   };
+
+  if (cfg0.windowFilled) toggleFillHeight();
   ipcMain.handle('toggle-fill-height', () => { toggleFillHeight(); });
 
   // If the user drags the window away while it's filled (instead of
@@ -386,7 +489,28 @@ function createMainWindow() {
   //   is idle, so a single setBounds() lands cleanly with no fight, no flicker, and
   //   no detour to the left edge. Height-only shrink with x/y preserved also keeps
   //   the OS grab-offset (cursor→top-left) valid if the user resumes after a pause.
+  // 항상위가 아닐 때는 tabWin도 항상위가 아니라서, 작업표시줄 클릭 등으로 mainWin이
+  // 다시 앞으로 나올 때 탭도 즉시 같이 따라와야 함 — 3초 주기 moveTop() 타이머만 믿으면
+  // 최대 3초까지 탭이 뒤에 남아있다가 뒤늦게 튀어나오는 것처럼 보임.
+  mainWin.on('show', () => { tabWin?.moveTop(); moveTabBeside(); });
+  mainWin.on('focus', () => { tabWin?.moveTop(); moveTabBeside(); });
+  mainWin.on('restore', () => { tabWin?.moveTop(); moveTabBeside(); });
+
+  let moveSaveTimer = null;
   mainWin.on('move', () => {
+    moveTabBeside();
+
+    // 창 위치 저장(디바운스) — 다음 실행 때 마지막 위치로 복원하기 위함. 채움 상태의
+    // 임시 좌표나 우리 자체 애니메이션 중간값은 저장하지 않음(windowHeight 저장 로직과 동일 원칙).
+    if (!boundsAnimTimer && !filled) {
+      clearTimeout(moveSaveTimer);
+      moveSaveTimer = setTimeout(() => {
+        if (!mainWin || mainWin.isDestroyed() || filled) return;
+        const [x, y] = mainWin.getPosition();
+        saveConfig({ ...loadConfig(), windowX: x, windowY: y });
+      }, 400);
+    }
+
     if (boundsAnimTimer) return; // our own animateBounds() is driving this move, ignore
     if (!filled) return;
     const targetHeight = preFillBounds ? preFillBounds.height : mainWin.getBounds().height;
@@ -399,12 +523,20 @@ function createMainWindow() {
       filled = false;
       preFillBounds = null;
       const cur = mainWin.getBounds();
+      // 더블클릭 원복 경로(toggleFillHeight)엔 이 저장이 있었는데 드래그로 풀리는 이 경로엔
+      // 빠져있었음 — 채운 채로 종료 안 해도 windowFilled가 true로 남아 다음 실행 때 다시
+      // 채워진 채로 뜨던 버그(오푸스 리뷰 발견, 2026-08-02).
+      saveConfig({ ...loadConfig(), windowFilled: false, windowX: cur.x, windowY: cur.y, windowHeight: targetHeight });
       mainWin.setBounds({ x: cur.x, y: cur.y, width: 400, height: targetHeight });
     }, 140);
   });
 
   let resizeSaveTimer = null;
   mainWin.on('resize', () => {
+    // 아래쪽 모서리로만 높이를 조절하면 x/y는 안 바뀌어서 'move' 이벤트가 안 뜨고, 그래서
+    // 엣지탭이 안 따라오고 예전 자리에 남아있던 버그(오푸스 리뷰 발견, 2026-08-02) — resize
+    // 때도 위치를 다시 계산해야 함.
+    moveTabBeside();
     if (filled) return; // don't persist the temporary filled height
     clearTimeout(resizeSaveTimer);
     resizeSaveTimer = setTimeout(() => {
@@ -418,6 +550,7 @@ function createMainWindow() {
     if (!forceQuit) {
       e.preventDefault();
       mainWin.hide();
+      moveTabBeside();
     }
   });
 }
@@ -436,6 +569,16 @@ if (!gotLock) {
   app.whenReady().then(() => {
     createMainWindow();
     createTray();
+    createTabWindow();
+    setInterval(() => {
+      if (tabWin && !tabWin.isDestroyed()) tabWin.moveTop();
+      // 윈도우 자체 화면 캡처 도구 등 외부 요인이 mainWin의 항상위 상태를 우리 모르게 풀어버리는
+      // 경우가 있어서(형 리포트 2026-08-02 — 캡처 후 라벨만 떠있고 앱은 다른 창 밑으로 감), tabWin과
+      // 같은 방식으로 주기적으로 재확인해서 어긋나 있으면 다시 맞춰준다.
+      if (mainWin && !mainWin.isDestroyed() && loadConfig().alwaysOnTop && !mainWin.isAlwaysOnTop()) {
+        mainWin.setAlwaysOnTop(true);
+      }
+    }, 3000);
     if (app.isPackaged) {
       autoUpdater.checkForUpdatesAndNotify();
     }
@@ -468,7 +611,18 @@ app.on('window-all-closed', () => { if (forceQuit) app.quit(); });
 ipcMain.handle('get-config', () => loadConfig());
 ipcMain.handle('save-config', (_, cfg) => {
   const prev = loadConfig();
-  saveConfig({ ...prev, ...cfg });
+  // 렌더러는 앱 시작 시 한 번 읽은 config 사본을 계속 들고 있다가 매번 통째로 다시 보냄(재생위치
+  // 자동저장 등). tabOffsetY/windowX/windowY/windowHeight/windowFilled는 메인 프로세스(탭 드래그·
+  // 창 이동/크기/채움토글)만 갱신하는 값이라 렌더러의 낡은 사본으로 덮어써지면 안 됨 — 항상 최신
+  // (prev) 값을 유지. (windowFilled 누락으로 재생 중 5초 자동저장이 채움상태를 계속 되돌리던
+  // 버그를 오푸스 리뷰에서 발견, 2026-08-02)
+  const { tabOffsetY, windowX, windowY, windowHeight, windowFilled, ...rendererCfg } = cfg;
+  saveConfig({
+    ...prev, ...rendererCfg,
+    tabOffsetY: prev.tabOffsetY, windowX: prev.windowX, windowY: prev.windowY, windowHeight: prev.windowHeight,
+    windowFilled: prev.windowFilled
+  });
+  if (cfg.theme) tabWin?.webContents.send('set-theme', cfg.theme);
   return true;
 });
 ipcMain.handle('get-playlists', () => loadPlaylists());
@@ -531,14 +685,16 @@ ipcMain.handle('close-settings', () => {
 });
 
 ipcMain.handle('minimize', () => mainWin?.minimize());
-ipcMain.handle('close-app', () => mainWin?.hide());
+ipcMain.handle('close-app', () => { mainWin?.hide(); moveTabBeside(); });
+ipcMain.handle('copy-text', (_, text) => { clipboard.writeText(String(text || '')); return true; });
 ipcMain.handle('toggle-always-on-top', () => {
   const next = !mainWin?.isAlwaysOnTop();
   mainWin?.setAlwaysOnTop(next);
+  tabWin?.setAlwaysOnTop(next);
   return next;
 });
 ipcMain.handle('get-always-on-top', () => mainWin?.isAlwaysOnTop() ?? false);
-ipcMain.handle('set-always-on-top', (_, val) => { mainWin?.setAlwaysOnTop(val); });
+ipcMain.handle('set-always-on-top', (_, val) => { mainWin?.setAlwaysOnTop(val); tabWin?.setAlwaysOnTop(val); });
 ipcMain.handle('get-login-item', () => app.getLoginItemSettings().openAtLogin);
 ipcMain.handle('set-login-item', (_, val) => {
   app.setLoginItemSettings({ openAtLogin: val, path: app.getPath('exe') });

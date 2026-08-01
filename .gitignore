@@ -3,3 +3,4 @@ dist/
 bin/yt-dlp
 bin/yt-dlp.exe
 *.log
+.DS_Store

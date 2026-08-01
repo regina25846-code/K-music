@@ -31,5 +31,11 @@ contextBridge.exposeInMainWorld('api', {
   getAppVersion: () => ipcRenderer.invoke('get-app-version'),
   checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
   onOpenSettings: (cb) => ipcRenderer.on('open-settings', cb),
-  onOpenAbout: (cb) => ipcRenderer.on('open-about', cb)
+  onOpenAbout: (cb) => ipcRenderer.on('open-about', cb),
+  toggleMainWindow: () => ipcRenderer.invoke('toggle-main-window'),
+  tabDragStart: () => ipcRenderer.invoke('tab-drag-start'),
+  tabDragMove: (dy) => ipcRenderer.invoke('tab-drag-move', dy),
+  tabDragEnd: (dy) => ipcRenderer.invoke('tab-drag-end', dy),
+  copyText: (text) => ipcRenderer.invoke('copy-text', text),
+  onSetTheme: (cb) => ipcRenderer.on('set-theme', (_, theme) => cb(theme))
 });

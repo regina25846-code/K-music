@@ -1,5 +1,48 @@
+; ===== 설치 흐름 표준 5단계 중 5번: 완료 화면 "바탕화면에 바로가기 만들기" 체크란 (기본 체크) =====
+; addDesktopLink 매크로(electron-builder 내장)가 설치 도중 무조건 바로가기를 만들어버려서,
+; 그 자동 생성은 끄고(DO_NOT_CREATE_DESKTOP_SHORTCUT) 완료 화면 체크박스에서 직접 만들도록 이관.
+; (K-Memo v1.4.0에서 검증된 패턴을 그대로 이식, 2026-08-02)
+!define DO_NOT_CREATE_DESKTOP_SHORTCUT
+
+; BUILD_UNINSTALLER(제거 프로그램 자체를 임시로 빌드하는 내부 단계)는 완료 화면을 따로
+; 컴파일하는데, 이 SHOWREADME 정의를 무조건 켜두면 그쪽 완료 화면(uninstall 섹션)에서
+; un. 접두어 없는 함수를 못 부른다고 컴파일 자체가 깨짐 — 진짜 설치 프로그램 컴파일 때만 적용.
+!ifndef BUILD_UNINSTALLER
+  !define MUI_FINISHPAGE_SHOWREADME ""
+  !define MUI_FINISHPAGE_SHOWREADME_TEXT "바탕화면에 바로가기 만들기"
+  !define MUI_FINISHPAGE_SHOWREADME_FUNCTION CreateDesktopShortcutAtFinish
+  !define MUI_FINISHPAGE_SHOWREADME_CHECKED
+
+  ; common.nsh가 나중에 선언하는 $newDesktopLink/$appExe는 이 시점(내 파일이 먼저 include됨)에
+  ; 아직 컴파일러가 몰라서 "unknown variable" 경고(-WX 때문에 빌드 실패)가 나서 별도 변수로 분리
+  Var /GLOBAL ktMusicDesktopLink
+
+  Function CreateDesktopShortcutAtFinish
+    StrCpy $ktMusicDesktopLink "$DESKTOP\${SHORTCUT_NAME}.lnk"
+    CreateShortCut "$ktMusicDesktopLink" "$INSTDIR\${PRODUCT_FILENAME}.exe" "" "$INSTDIR\${PRODUCT_FILENAME}.exe" 0 "" "" "${APP_DESCRIPTION}"
+  FunctionEnd
+!endif
+
 !macro preInit
-  ; K-Music 실행 중인지 확인 (FindWindow는 트레이 상주 시 창 제목이 없어서 못 잡던 문제가 있어서
+  ; ===== 설치 흐름 표준 1번: 이미 설치돼있으면 제거하기/제거하지 않기부터 선택 =====
+  ; BUILD_UNINSTALLER(제거 프로그램 자체를 빌드하는 내부 단계)에서는 이 블록을 건너뜀 —
+  ; 안 그러면 실제 제거 프로그램을 실행할 때도 "이미 설치돼있는데 제거할까요?" 라는
+  ; 앞뒤가 안 맞는 질문이 또 뜨게 됨.
+  !ifndef BUILD_UNINSTALLER
+    ReadRegStr $9 HKCU "${UNINSTALL_REGISTRY_KEY}" "UninstallString"
+    StrCmp $9 "" step1_notinstalled
+      ReadRegStr $9 HKLM "${UNINSTALL_REGISTRY_KEY}" "UninstallString"
+    step1_notinstalled:
+    StrCmp $9 "" step1_done
+      MessageBox MB_YESNO|MB_ICONQUESTION "K-Music이 이미 설치되어 있습니다.$\n기존 버전을 제거하시겠습니까?$\n$\n예: 제거하기(제거 후 Setup을 다시 실행해서 새로 설치)$\n아니오: 제거하지 않고 계속 설치(업데이트)" IDYES step1_doRemove IDNO step1_done
+      step1_doRemove:
+        ExecWait '$9 _?=$INSTDIR'
+        Quit
+    step1_done:
+  !endif
+
+  ; ===== 설치 흐름 표준 3번: K-Music 실행 중인지 확인 =====
+  ; (FindWindow는 트레이 상주 시 창 제목이 없어서 못 잡던 문제가 있어서
   ; tasklist 기반으로 교체 — K-Memo에서 검증된 패턴을 그대로 이식, 2026-07-20)
   nsExec::ExecToStack 'cmd /c tasklist /fi "imagename eq K-Music.exe" | find /i "K-Music.exe"'
   Pop $0
@@ -25,15 +68,12 @@
 !macroend
 
 !macro customUnInstall
-  ; ⚠️ 형이 지적: 새 버전 설치 중 기존 버전을 자동으로 먼저 제거하는 과정에서도 이 매크로가
-  ; 실행돼서, "설치중" 화면 위에 삭제 여부 확인창이 갑자기 뜨는 문제가 있었음(2026-07-20).
-  ; 이건 형이 직접 "제거하기"를 누른 게 아니라 설치 마법사가 조용히 처리해야 하는 내부 단계라,
-  ; 이 경우엔 아예 묻지 않고 삭제 안 함으로 자동 처리(IfSilent로 이 상황 감지).
-  ; 형이 Windows 설정 > 앱에서 K-Music을 직접 "제거"할 때만 진짜로 물어봄.
+  ; 새 버전 설치 중 기존 버전을 자동으로 지우는 내부 단계(silent)에서는 묻지 않고 자동으로
+  ; 삭제 안 함 처리, 형이 Windows 설정에서 직접 "제거"할 때만 진짜로 물어봄(K-Tube/K-Memo와 동일 패턴)
   IfSilent keepdata
     ; 제거 시 설정/캐시(가사 캐시, 플레이리스트 등) 삭제 여부를 물어봄 — 기본은 "삭제 안 함"
     ; (IDNO를 기본 포커스로 — 실수로 소중한 플레이리스트가 날아가는 걸 막기 위함)
-    MessageBox MB_YESNO|MB_ICONQUESTION|MB_DEFBUTTON2 "애플리케이션 데이터(설정, 재생목록, 가사 캐시)도 함께 삭제하시겠습니까?" IDNO keepdata
+    MessageBox MB_YESNO|MB_ICONQUESTION|MB_DEFBUTTON2 "설치 대상과 애플리케이션 데이터(설정, 재생목록, 가사 캐시)도 함께 삭제하시겠습니까?" IDNO keepdata
     RMDir /r "$APPDATA\kris-music"
   keepdata:
 !macroend
