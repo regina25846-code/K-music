@@ -61,6 +61,77 @@ function fmt(s) {
 }
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2); }
 function esc(s) { return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function videoIdFromUrl(url) {
+  try {
+    const u = new URL(url);
+    if (u.hostname.includes('youtu.be')) return u.pathname.slice(1);
+    return u.searchParams.get('v');
+  } catch { return null; }
+}
+
+// 2026-08-07 추천 개인화용 — 곡을 재생목록에 넣는 모든 경로(URL 추가/검색 추가/검색 후 즉시재생)가
+// 이 함수 하나로 통일. "직접 추가한 곡은 항상 자동추천보다 먼저 재생된다"는 규칙(형 확정)을 지키려면
+// 항상 맨 뒤(push)가 아니라 꼬리에 붙어있는 auto 트랙들 "앞"에 꽂아야 한다. autoplayNow일 땐 그
+// 시점부터 이전 시드곡 기준으로 짜여있던 자동추천 꼬리 자체가 의미 없어지므로 통째로 걷어낸다
+// (형이 확정한 "새 곡 틀면 그 뒤로 그 곡에 맞는 리스트가 새로 생김" 시나리오).
+function addManualTrack(plIdx, trackData, { autoplayNow = false } = {}) {
+  const tracks = playlists[plIdx].tracks;
+  const track = { ...trackData, source: 'manual' };
+  if (autoplayNow && plIdx === playingPl && currentTrack >= 0) {
+    let i = tracks.length - 1;
+    while (i > currentTrack && (tracks[i].source || 'manual') === 'auto') { tracks.splice(i, 1); i--; }
+    tracks.push(track);
+    return tracks.length - 1;
+  }
+  let insertAt = tracks.length;
+  if (plIdx === playingPl && currentTrack >= 0) {
+    let i = tracks.length - 1;
+    while (i > currentTrack && (tracks[i].source || 'manual') === 'auto') i--;
+    insertAt = i + 1;
+  }
+  tracks.splice(insertAt, 0, track);
+  return insertAt;
+}
+
+// 재생 중인 목록의 현재 곡 뒤에 아직 안 나온 "직접 추가한 곡"이 남아있으면 대기하고, 자동추천
+// 꼬리가 3곡 미만으로 줄었을 때만 큐 끝 곡(없으면 현재곡)을 시드로 부족한 만큼 채워넣는다.
+let extendingQueue = false;
+async function maybeExtendQueue(plIdx) {
+  if (!currentAccount || currentAccount.prefs?.personalizeRecommendations === false) return;
+  if (extendingQueue) return;
+  if (plIdx !== playingPl) return;
+  const tracks = playlists[plIdx]?.tracks;
+  if (!tracks || !tracks.length || currentTrack < 0) return;
+
+  let autoTailCount = 0;
+  let lastId = null;
+  for (let i = currentTrack + 1; i < tracks.length; i++) {
+    if ((tracks[i].source || 'manual') === 'manual') return; // 아직 들을 직접추가곡이 남아있음 — 대기
+    autoTailCount++;
+    lastId = videoIdFromUrl(tracks[i].ytUrl);
+  }
+  if (autoTailCount >= 3) return;
+
+  const seedId = lastId || videoIdFromUrl(tracks[currentTrack].ytUrl);
+  if (!seedId) return;
+  const need = 3 - autoTailCount;
+
+  extendingQueue = true;
+  try {
+    const excludeIds = tracks.map(t => videoIdFromUrl(t.ytUrl)).filter(Boolean);
+    const recs = await window.api.getRecommendations(`https://www.youtube.com/watch?v=${seedId}`, excludeIds, need);
+    if (!recs.length) return;
+    // await 도중 사용자가 다른 곡/목록으로 옮겨갔을 수 있으니 재확인 후 반영
+    if (playingPl !== plIdx || playlists[plIdx]?.tracks !== tracks) return;
+    recs.forEach(r => tracks.push({ ytUrl: r.ytUrl, title: r.title, channel: r.channel, thumbnail: r.thumbnail, duration: r.duration, releaseYear: r.releaseYear, source: 'auto' }));
+    await save();
+    if (curView === 'home' && currentPl === plIdx) renderTrackList();
+  } catch {
+    // 네트워크 실패 등은 조용히 무시 — 다음 곡 넘어갈 때 다시 시도됨
+  } finally {
+    extendingQueue = false;
+  }
+}
 
 function toast(msg) {
   toastEl.textContent = msg;
@@ -480,9 +551,9 @@ async function addByUrl(url, autoplay=false) {
   try {
     const info = await window.api.getVideoInfo(url);
     if (info.error) { toast('오류: '+info.error); return; }
-    playlists[currentPl].tracks.push({ytUrl:url, title:info.title, channel:info.channel, thumbnail:info.thumbnail, duration:info.duration});
+    const idx = addManualTrack(currentPl, {ytUrl:url, title:info.title, channel:info.channel, thumbnail:info.thumbnail, duration:info.duration, releaseYear:info.releaseYear}, {autoplayNow: autoplay});
     await save(); renderTrackList();
-    if (autoplay) { switchView('home'); playTrack(playlists[currentPl].tracks.length-1); }
+    if (autoplay) { switchView('home'); playTrack(idx); }
   } catch(e) { toast('추가 실패: '+e.message); } finally { hideLoad(); }
 }
 
@@ -514,9 +585,22 @@ function stopAudio() {
   if (inLyrics) renderLyricsPreview();
 }
 
+let wasNaturalEnd = false; // 2026-08-07 추천 개인화 — 곡이 끝까지 재생돼서 넘어간 건지(완주),
+                            // 사용자가 중간에 다른 곡으로 넘긴 건지(스킵) 구분하는 플래그
+
 async function playTrack(idx, plIdx = currentPl, resumeSec = 0) {
   const tracks = playlists[plIdx].tracks;
   if (!tracks[idx]) return;
+
+  // 직전 곡의 완주/스킵을 기록(재정렬 알고리즘의 핵심 신호). resumeSec>0인 이어듣기 재시작
+  // 케이스는 currentTrack===idx라서 아래 조건에서 자연히 제외됨.
+  if (playingPl >= 0 && playlists[playingPl]?.tracks[currentTrack] && (playingPl !== plIdx || currentTrack !== idx)) {
+    const prevT = playlists[playingPl].tracks[currentTrack];
+    const listenedSec = audio.currentTime || 0;
+    window.api.recordPlayEvent(prevT.ytUrl, { title: prevT.title, channel: prevT.channel, duration: prevT.duration, releaseYear: prevT.releaseYear, listenedSec }, wasNaturalEnd ? 'complete' : 'skip');
+  }
+  wasNaturalEnd = false;
+
   const prev = currentTrack;
   const prevPl = playingPl;
   currentTrack = idx;
@@ -539,6 +623,8 @@ async function playTrack(idx, plIdx = currentPl, resumeSec = 0) {
     isPlaying=true; setPlayIcon(true);
     await saveCfg({lastPlId: playlists[plIdx].id, lastTrackIdx: idx, lastPos: resumeSec});
     if (inLyrics) ensureLyricsLoaded();
+    window.api.recordPlayEvent(t.ytUrl, { title: t.title, channel: t.channel, duration: t.duration, releaseYear: t.releaseYear }, 'play');
+    maybeExtendQueue(plIdx); // 큐 보충은 백그라운드로, 재생 시작을 기다리게 하지 않음
   } catch(e) {
     toast('재생 실패: '+e.message);
     isPlaying=false; setPlayIcon(false);
@@ -797,8 +883,15 @@ audio.ontimeupdate = () => {
 audio.onpause = () => { if (playingPl>=0) saveCfg({lastPos: audio.currentTime}); };
 audio.onended = () => {
   if (repeatMode===2) { audio.currentTime=0; audio.play(); return; }
+  wasNaturalEnd = true;
   const tracks = playlists[playingPl]?.tracks || [];
-  if (repeatMode===0 && currentTrack===tracks.length-1) { isPlaying=false; setPlayIcon(false); renderTrackList(); return; }
+  if (repeatMode===0 && currentTrack===tracks.length-1) {
+    // 목록 맨 끝이라 playTrack으로 안 넘어가서, 완주 기록을 여기서 직접 남긴다
+    const t = tracks[currentTrack];
+    if (t) window.api.recordPlayEvent(t.ytUrl, { title: t.title, channel: t.channel, duration: t.duration, releaseYear: t.releaseYear, listenedSec: audio.duration || t.duration || 0 }, 'complete');
+    wasNaturalEnd = false;
+    isPlaying=false; setPlayIcon(false); renderTrackList(); return;
+  }
   nextTrack();
 };
 
@@ -873,16 +966,16 @@ async function doSearch(q) {
     el.querySelector('.s-add').onclick = async e => {
       e.stopPropagation();
       const btn=e.target; btn.textContent='추가 중...'; btn.disabled=true;
-      playlists[currentPl].tracks.push({ytUrl:r.ytUrl,title:r.title,channel:r.channel,thumbnail:r.thumbnail,duration:r.duration});
+      addManualTrack(currentPl, {ytUrl:r.ytUrl,title:r.title,channel:r.channel,thumbnail:r.thumbnail,duration:r.duration,releaseYear:r.releaseYear});
       await save(); renderTrackList();
       btn.textContent='✓ 추가됨';
     };
     el.onclick = e => {
       if(e.target.classList.contains('s-add')) return;
-      playlists[currentPl].tracks.push({ytUrl:r.ytUrl,title:r.title,channel:r.channel,thumbnail:r.thumbnail,duration:r.duration});
+      const idx = addManualTrack(currentPl, {ytUrl:r.ytUrl,title:r.title,channel:r.channel,thumbnail:r.thumbnail,duration:r.duration,releaseYear:r.releaseYear}, {autoplayNow: true});
       save(); renderTrackList();
       switchView('home');
-      playTrack(playlists[currentPl].tracks.length-1);
+      playTrack(idx);
     };
     $('search-results').appendChild(el);
   });

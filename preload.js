@@ -43,5 +43,8 @@ contextBridge.exposeInMainWorld('api', {
   registerAccount: (name, pin) => ipcRenderer.invoke('account-register', name, pin),
   changeAccountName: (newName) => ipcRenderer.invoke('account-change-name', newName),
   changeAccountPin: (currentPin, newPin, resetMode) => ipcRenderer.invoke('account-change-pin', currentPin, newPin, resetMode),
-  setPersonalize: (on) => ipcRenderer.invoke('account-set-personalize', on)
+  setPersonalize: (on) => ipcRenderer.invoke('account-set-personalize', on),
+  // 추천(2026-08-07 추가)
+  getRecommendations: (seedYtUrl, excludeIds, count) => ipcRenderer.invoke('get-recommendations', seedYtUrl, excludeIds, count),
+  recordPlayEvent: (ytUrl, meta, eventType) => ipcRenderer.invoke('record-play-event', ytUrl, meta, eventType)
 });

@@ -79,9 +79,14 @@ function saveAccounts(data) { writeJsonAtomic(ACCOUNTS_FILE, data); }
 
 function historyFile(accountId) { return path.join(HISTORY_DIR, `${accountId}.json`); }
 function loadHistory(accountId) {
-  try { return JSON.parse(fs.readFileSync(historyFile(accountId), 'utf8')); } catch {
-    return { schemaVersion: 1, accountId, updatedAt: new Date().toISOString(), tracks: {}, channels: {}, mixSeeds: {} };
+  let h;
+  try { h = JSON.parse(fs.readFileSync(historyFile(accountId), 'utf8')); } catch {
+    h = { schemaVersion: 1, accountId, updatedAt: new Date().toISOString(), tracks: {}, channels: {}, mixSeeds: {} };
   }
+  // artists/decades는 2026-08-07에 추가된 필드라, 그 전에 생성된 history 파일엔 없을 수 있음 —
+  // 없으면 빈 객체로 채워서 이후 코드가 undefined 접근으로 죽지 않게 함(하위호환).
+  h.tracks ||= {}; h.channels ||= {}; h.artists ||= {}; h.decades ||= {}; h.mixSeeds ||= {};
+  return h;
 }
 function saveHistory(h) { writeJsonAtomic(historyFile(h.accountId), h); }
 
@@ -287,13 +292,116 @@ async function searchYoutube(query, limit = 10) {
         title: d.title,
         channel: d.uploader || d.channel || d.uploader_id || '',
         thumbnail: d.thumbnail || (d.thumbnails && d.thumbnails[0]?.url) || '',
-        duration: d.duration
+        duration: d.duration,
+        releaseYear: d.release_year || null
       };
     } catch { return null; }
   }).filter(Boolean);
 
   items.sort((a, b) => LIVE_BROADCAST_RE.test(a.title) - LIVE_BROADCAST_RE.test(b.title));
   return items.slice(0, limit);
+}
+
+// ── 추천 재정렬(개인화 믹스) ────────────────────────────────────────────────────
+// 2026-08-07, 형 요청. 유튜브가 자체 계산하는 "믹스(Mix)" 재생목록(watch?v=<id>&list=RD<id>)을
+// 그대로 가져오되, 순서만 형 계정의 재생기록(채널/곡 단위 집계)으로 다시 매긴다 — 추천 알고리즘을
+// 새로 만드는 게 아니라 유튜브 결과를 재료로 재정렬하는 방식(실측: yt-dlp로 릭애슬리 시드 테스트
+// 시 관련도 높은 80년대 팝 곡들이 그대로 나옴, 2026-08-07).
+function extractVideoId(url) {
+  try {
+    const u = new URL(url);
+    if (u.hostname.includes('youtu.be')) return u.pathname.slice(1);
+    return u.searchParams.get('v');
+  } catch { return null; }
+}
+
+async function getMixForVideo(videoId, limit = 20) {
+  const json = await ytdlp([
+    `https://www.youtube.com/watch?v=${videoId}&list=RD${videoId}`,
+    '--dump-json',
+    '--no-warnings',
+    '--flat-playlist',
+    '--playlist-end', String(limit)
+  ]);
+  const items = json.split('\n').filter(Boolean).map(line => {
+    try {
+      const d = JSON.parse(line);
+      return {
+        id: d.id,
+        ytUrl: d.url || `https://www.youtube.com/watch?v=${d.id}`,
+        title: d.title,
+        channel: d.uploader || d.channel || d.uploader_id || '',
+        thumbnail: d.thumbnail || (d.thumbnails && d.thumbnails[d.thumbnails.length - 1]?.url) || '',
+        duration: d.duration,
+        releaseYear: d.release_year || null
+      };
+    } catch { return null; }
+  }).filter(Boolean);
+  return items.filter(it => it.id && it.id !== videoId); // 시드곡 자기 자신은 제외
+}
+
+// 추천 후보에서만 방송클립/모음/베스트 영상을 아예 걸러낸다(형 요청, 2026-08-07) — 검색
+// 기능의 LIVE_BROADCAST_RE는 "정식 음원이 없을 수도 있으니 숨기지 말고 뒤로만 밀자"는
+// 목적이라 그대로 두고, 이건 완전히 별개의 상수다. 추천은 대체 후보가 늘 넉넉해서
+// 완전히 제외해도 손해가 없고, 형이 검색으로 직접 그런 영상을 듣는 습관과도 안 부딪힌다.
+const MIX_EXCLUDE_RE = /(방송|라이브|직캠|모음|베스트|플레이리스트|live|broadcast|best|playlist)/i;
+
+// 곡 단위 기록만으론 순위를 못 매긴다 — 믹스에 뜨는 곡은 대부분 한 번도 안 튼 새 곡이라서,
+// "이 채널/아티스트를 얼마나 좋아하나"라는 집계가 재정렬의 실질적인 핵심 신호다. 채널은
+// "가요톱10 아카이브"류 잡탕 채널이면 신뢰도가 낮아지므로(형이 실제 사례로 확인, 2026-08-07),
+// 제목에서 뽑아낸 아티스트명(parseArtistTitle, 가사매칭에 쓰던 함수 재사용)을 더 강한 신호로
+// 취급한다. 발매연도(시대)는 보조 신호라 가중치를 약하게 둔다. completeCount(끝까지 들음)를
+// playCount(그냥 재생됨, 자동재생으로 스쳐간 것도 포함)보다 신뢰도 높은 신호로 취급.
+function scoreCandidate(item, history) {
+  const t = history.tracks[item.id];
+  if (t?.blocked) return -Infinity;
+  let score = 0;
+
+  const ch = item.channel && history.channels[item.channel];
+  if (ch) {
+    score += (ch.playCount || 0) * 1.5;
+    score -= (ch.skipCount || 0) * 1.5;
+    score += (ch.favoriteCount || 0) * 5;
+  }
+
+  const ar = item.artist && history.artists?.[item.artist];
+  if (ar) {
+    score += (ar.playCount || 0) * 2.5;
+    score -= (ar.skipCount || 0) * 2;
+    score += (ar.favoriteCount || 0) * 6;
+  }
+
+  const dc = item.decade && history.decades?.[item.decade];
+  if (dc) {
+    score += (dc.playCount || 0) * 0.8;
+    score -= (dc.skipCount || 0) * 0.8;
+  }
+
+  if (t) {
+    score += (t.completeCount || 0) * 3;
+    score -= (t.skipCount || 0) * 2;
+    if (t.favorite) score += 8;
+  }
+  return score;
+}
+
+// 시드/후보 아이템에 아티스트명과 시대(연대) 라벨을 붙인다. reorderByHistory에 넘기기 전에
+// 한 번만 호출하면 됨 — record-play-event 쪽에서도 같은 규칙으로 붙여야 스코어링과 기록이 어긋나지 않는다.
+function enrichItem(item) {
+  const { artist } = parseArtistTitle(item.title || '', item.channel || '');
+  const decade = item.releaseYear ? `${Math.floor(item.releaseYear / 10) * 10}s` : null;
+  return { ...item, artist: artist || null, decade };
+}
+
+// Array.prototype.sort는 안정 정렬(V8 기준)이라, 기록이 전혀 없는(점수 0) 곡들끼리는 원래
+// 유튜브가 준 순서 그대로 유지된다 — 즉 계정을 막 만들었을 때(콜드스타트)는 사실상 유튜브
+// 기본 순서 그대로 나오고, 재생기록이 쌓일수록 그 위로 형 취향 신호가 얹히는 구조다.
+function reorderByHistory(items, history) {
+  return items
+    .map(it => ({ it, score: scoreCandidate(it, history) }))
+    .filter(x => x.score > -Infinity)
+    .sort((a, b) => b.score - a.score)
+    .map(x => x.it);
 }
 
 let mainWin = null;
@@ -727,7 +835,7 @@ ipcMain.handle('account-register', (_, name, pin) => {
   data.accounts.push(account);
   data.activeAccountId = id;
   saveAccounts(data);
-  saveHistory({ schemaVersion: 1, accountId: id, updatedAt: now, tracks: {}, channels: {}, mixSeeds: {} });
+  saveHistory({ schemaVersion: 1, accountId: id, updatedAt: now, tracks: {}, channels: {}, artists: {}, decades: {}, mixSeeds: {} });
 
   const { pinHash, ...safe } = account;
   return { ok: true, account: safe };
@@ -771,6 +879,84 @@ ipcMain.handle('account-set-personalize', (_, on) => {
   return true;
 });
 
+// ── 추천 IPC ───────────────────────────────────────────────────────────────────
+ipcMain.handle('get-recommendations', async (_, seedYtUrl, excludeIds, count) => {
+  const account = getActiveAccount();
+  if (!account) return [];
+  const seedId = extractVideoId(seedYtUrl);
+  if (!seedId) return [];
+  try {
+    const mix = (await getMixForVideo(seedId, 20))
+      .filter(it => !MIX_EXCLUDE_RE.test(it.title))
+      .map(enrichItem);
+    const history = loadHistory(account.id);
+    const exclude = new Set(excludeIds || []);
+    const ranked = reorderByHistory(mix, history).filter(it => !exclude.has(it.id));
+    return ranked.slice(0, count || 3);
+  } catch {
+    return []; // 네트워크 실패 등은 조용히 빈 목록 — 추천 실패로 재생 자체가 막히면 안 됨
+  }
+});
+
+// eventType: 'play' | 'complete' | 'skip'. meta: { title, channel, duration, listenedSec?, releaseYear? }
+ipcMain.handle('record-play-event', (_, ytUrl, meta, eventType) => {
+  const account = getActiveAccount();
+  if (!account) return false;
+  const vid = extractVideoId(ytUrl);
+  if (!vid) return false;
+
+  const history = loadHistory(account.id);
+  const now = new Date().toISOString();
+  if (!history.tracks[vid]) {
+    history.tracks[vid] = {
+      ytUrl, title: meta?.title || '', channel: meta?.channel || '',
+      playCount: 0, completeCount: 0, skipCount: 0, totalListenedSec: 0,
+      durationSec: meta?.duration || 0, firstPlayedAt: now, lastPlayedAt: now,
+      favorite: false, favoritedAt: null, blocked: false
+    };
+  }
+  const t = history.tracks[vid];
+  t.lastPlayedAt = now;
+  if (meta?.channel) t.channel = meta.channel;
+
+  const chName = t.channel || '(알 수 없음)';
+  if (!history.channels[chName]) {
+    history.channels[chName] = { playCount: 0, skipCount: 0, favoriteCount: 0, totalListenedSec: 0, lastPlayedAt: now };
+  }
+  const ch = history.channels[chName];
+  ch.lastPlayedAt = now;
+
+  // 아티스트/시대는 채널과 별개로 제목에서 뽑아서 집계(가요톱10류 잡탕 채널이어도 정확한
+  // 아티스트 단위 취향 반영, 2026-08-07 형 확인 사례 기반)
+  const { artist } = parseArtistTitle(t.title, t.channel);
+  let arObj = null;
+  if (artist) {
+    if (!history.artists[artist]) history.artists[artist] = { playCount: 0, skipCount: 0, favoriteCount: 0, totalListenedSec: 0, lastPlayedAt: now };
+    arObj = history.artists[artist];
+    arObj.lastPlayedAt = now;
+  }
+  const decade = meta?.releaseYear ? `${Math.floor(meta.releaseYear / 10) * 10}s` : null;
+  let dcObj = null;
+  if (decade) {
+    if (!history.decades[decade]) history.decades[decade] = { playCount: 0, skipCount: 0, favoriteCount: 0 };
+    dcObj = history.decades[decade];
+  }
+
+  if (eventType === 'play') { t.playCount++; ch.playCount++; if (arObj) arObj.playCount++; if (dcObj) dcObj.playCount++; }
+  else if (eventType === 'complete') { t.completeCount++; }
+  else if (eventType === 'skip') { t.skipCount++; ch.skipCount++; if (arObj) arObj.skipCount++; if (dcObj) dcObj.skipCount++; }
+
+  if (typeof meta?.listenedSec === 'number' && meta.listenedSec > 0) {
+    t.totalListenedSec += meta.listenedSec;
+    if (arObj) arObj.totalListenedSec += meta.listenedSec;
+    ch.totalListenedSec += meta.listenedSec;
+  }
+
+  history.updatedAt = now;
+  saveHistory(history);
+  return true;
+});
+
 ipcMain.handle('get-stream', async (_, ytUrl, quality) => {
   try {
     return await getStreamInfo(ytUrl, quality || loadConfig().quality || '192');
@@ -796,7 +982,8 @@ ipcMain.handle('get-video-info', async (_, ytUrl) => {
       title: d.title,
       channel: d.uploader || d.channel || '',
       thumbnail: d.thumbnail,
-      duration: d.duration
+      duration: d.duration,
+      releaseYear: d.release_year || null // 2026-08-07 추천 개인화의 "시대별" 신호용
     };
   } catch (e) {
     return { error: e.message };
