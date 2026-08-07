@@ -404,6 +404,40 @@ function reorderByHistory(items, history) {
     .map(x => x.it);
 }
 
+// 같은 노래가 업로더만 바뀐 채 여러 영상으로 믹스에 섞여 들어오는 걸 걸러낸다(형 실사용
+// 중 발견, 2026-08-08 — "풀하우스 OST Why"가 업로더 다른 두 영상으로 연달아 추천됨). 영상
+// ID는 서로 달라서 excludeIds로는 못 걸러지고, parseArtistTitle의 "|" 뒤 잘라내기는 채널
+// 태그가 항상 title 맨 뒤에만 붙는다는 가정이라 title 중간에 곡정보가 있는 경우 오히려 곡
+// 정보를 날려버려서(예: "Full House Ost | Rain - Why...") 이 용도로는 못 씀. 그래서 괄호만
+// 지우고 나머지는 그대로 토큰화한 뒤, "재생시간이 사실상 같다(±1초) + 의미있는 단어가
+// 하나라도 겹친다"는 실사용 케이스 기준의 느슨한 판정만 쓴다 — 재업로드는 오디오가 그대로라
+// 길이가 초 단위까지 거의 일치하는 반면, 서로 다른 두 곡이 우연히 길이까지 같을 확률은
+// 낮다는 전제. 완벽한 동일곡 판정기는 아니고, 이번처럼 뚜렷한 경우만 잡아내는 실용적 필터.
+const TITLE_NOISE_WORDS = new Set(['ost', 'video', 'clip', 'official', 'mv', 'm/v', 'audio', 'lyrics', 'lyric', 'ver', 'live']);
+function titleTokens(title) {
+  return (title || '')
+    .toLowerCase()
+    .replace(/[\(\[［【][^)\]］】]*[\)\]］】]/g, ' ') // 괄호류만 제거 (파이프는 안 건드림)
+    .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .split(' ')
+    .filter(w => w.length >= 2 && !TITLE_NOISE_WORDS.has(w));
+}
+function looksLikeSameSong(a, b) {
+  if (Math.abs((a.duration || 0) - (b.duration || 0)) > 1) return false;
+  const ta = titleTokens(a.title);
+  const tb = new Set(titleTokens(b.title));
+  return ta.some(w => tb.has(w));
+}
+function dedupeSimilarSongs(items) {
+  const kept = [];
+  for (const it of items) {
+    if (!kept.some(k => looksLikeSameSong(k, it))) kept.push(it);
+  }
+  return kept;
+}
+
 let mainWin = null;
 let settingsWin = null;
 let tabWin = null;
@@ -891,7 +925,7 @@ ipcMain.handle('get-recommendations', async (_, seedYtUrl, excludeIds, count) =>
       .map(enrichItem);
     const history = loadHistory(account.id);
     const exclude = new Set(excludeIds || []);
-    const ranked = reorderByHistory(mix, history).filter(it => !exclude.has(it.id));
+    const ranked = dedupeSimilarSongs(reorderByHistory(mix, history).filter(it => !exclude.has(it.id)));
     return ranked.slice(0, count || 3);
   } catch {
     return []; // 네트워크 실패 등은 조용히 빈 목록 — 추천 실패로 재생 자체가 막히면 안 됨

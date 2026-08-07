@@ -94,7 +94,13 @@ function addManualTrack(plIdx, trackData, { autoplayNow = false } = {}) {
 }
 
 // 재생 중인 목록의 현재 곡 뒤에 아직 안 나온 "직접 추가한 곡"이 남아있으면 대기하고, 자동추천
-// 꼬리가 3곡 미만으로 줄었을 때만 큐 끝 곡(없으면 현재곡)을 시드로 부족한 만큼 채워넣는다.
+// 꼬리가 3곡 미만으로 줄었을 때만 부족한 만큼 채워넣는다.
+//
+// 시드는 항상 "지금 실제로 재생중인 곡"으로 고정한다 — 예전엔 큐에 마지막으로 넣어둔 곡을
+// 다음 시드로 삼아서(체이닝), 채워질 때마다 그 3번째곡 → 또 그 3번째곡 하는 식으로 계속
+// 이어붙였는데, 이러면 유튜브 믹스 특성상 몇 단계만 넘어가도 원래 곡과 전혀 상관없는 방향
+// 으로 새버린다(형 실사용 중 발견, 2026-08-08 — 풀하우스 OST 듣다가 몇 단계 만에 인도네시아
+// 밴드 노래로 도배됨). 매번 지금 듣고 있는 곡에서 다시 출발하면 드리프트가 누적되지 않는다.
 let extendingQueue = false;
 async function maybeExtendQueue(plIdx) {
   if (!currentAccount || currentAccount.prefs?.personalizeRecommendations === false) return;
@@ -104,15 +110,13 @@ async function maybeExtendQueue(plIdx) {
   if (!tracks || !tracks.length || currentTrack < 0) return;
 
   let autoTailCount = 0;
-  let lastId = null;
   for (let i = currentTrack + 1; i < tracks.length; i++) {
     if ((tracks[i].source || 'manual') === 'manual') return; // 아직 들을 직접추가곡이 남아있음 — 대기
     autoTailCount++;
-    lastId = videoIdFromUrl(tracks[i].ytUrl);
   }
   if (autoTailCount >= 3) return;
 
-  const seedId = lastId || videoIdFromUrl(tracks[currentTrack].ytUrl);
+  const seedId = videoIdFromUrl(tracks[currentTrack].ytUrl);
   if (!seedId) return;
   const need = 3 - autoTailCount;
 
@@ -131,6 +135,25 @@ async function maybeExtendQueue(plIdx) {
   } finally {
     extendingQueue = false;
   }
+}
+
+// 이미 지나간(재생 완료/스킵된) 알고리즘 추천곡이 재생목록에 무한정 쌓이는 걸 막는다(형 요청,
+// 2026-08-07) — 아직 안 나온 미래 추천 3곡(maybeExtendQueue가 관리)이나 형이 직접 넣은 곡은
+// 절대 안 건드리고, currentTrack보다 앞에 있는 "auto" 트랙만 오래된 순으로 정리한다.
+function pruneOldAutoTracks(plIdx, keep = 10) {
+  const tracks = playlists[plIdx]?.tracks;
+  if (!tracks || plIdx !== playingPl || currentTrack < 0) return;
+  const pastAutoIdx = [];
+  for (let i = 0; i < currentTrack; i++) {
+    if ((tracks[i].source || 'manual') === 'auto') pastAutoIdx.push(i);
+  }
+  const removeCount = pastAutoIdx.length - keep;
+  if (removeCount <= 0) return;
+  const toRemove = new Set(pastAutoIdx.slice(0, removeCount)); // 가장 오래 전에 지나간 것부터
+  playlists[plIdx].tracks = tracks.filter((t, i) => !toRemove.has(i));
+  currentTrack -= toRemove.size; // 앞쪽에서 빠진 개수만큼 현재 인덱스도 당겨줌
+  save();
+  if (curView === 'home' && currentPl === plIdx) renderTrackList();
 }
 
 function toast(msg) {
@@ -376,7 +399,7 @@ function renderTrackList() {
     el.innerHTML = `
       <span class="t-num">${numHtml}</span>
       <img class="t-thumb" src="${esc(t.thumbnail||'')}" onerror="this.style.visibility='hidden'" alt="" draggable="false"/>
-      <div class="t-meta"><div class="t-title">${esc(t.title)}</div><div class="t-ch">${esc(t.channel)}</div></div>
+      <div class="t-meta"><div class="t-title">${t.source==='auto' ? '<span class="t-auto-badge">추천</span>' : ''}${esc(t.title)}</div><div class="t-ch">${esc(t.channel)}</div></div>
       <span class="t-dur">${fmt(t.duration)}</span>
       <button class="t-del" data-i="${i}">🗑</button>
     `;
@@ -625,6 +648,7 @@ async function playTrack(idx, plIdx = currentPl, resumeSec = 0) {
     if (inLyrics) ensureLyricsLoaded();
     window.api.recordPlayEvent(t.ytUrl, { title: t.title, channel: t.channel, duration: t.duration, releaseYear: t.releaseYear }, 'play');
     maybeExtendQueue(plIdx); // 큐 보충은 백그라운드로, 재생 시작을 기다리게 하지 않음
+    pruneOldAutoTracks(plIdx); // 지나간 추천곡은 최근 10곡만 남기고 정리
   } catch(e) {
     toast('재생 실패: '+e.message);
     isPlaying=false; setPlayIcon(false);
