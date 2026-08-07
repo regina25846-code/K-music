@@ -15,6 +15,7 @@ let repeatMode = 0;  // 0=off 1=all 2=one
 let shuffle = false;
 let config = {};
 let streamCache = {};  // ytUrl -> { url, expireTs }
+let currentAccount = null; // 2026-08-07 계정(로그인) 기능 추가 — { id, name, prefs, ... }, pinHash는 메인 프로세스가 절대 안 보내줌
 
 let inLyrics = false;
 let lyricsState = null;   // { found, synced(parsed lines[] or null), plain, artist, title, ytUrl }
@@ -115,6 +116,98 @@ $('modal-ok').onclick = () => closeModal($('modal-input').value.trim());
 $('modal-cancel').onclick = () => closeModal(null);
 $('modal-input').onkeydown = e => { if(e.key==='Enter') closeModal($('modal-input').value.trim()); if(e.key==='Escape') closeModal(null); };
 
+// ── 계정(로그인) ──────────────────────────────────────────────────────────────
+// 2026-08-07 추가(kmusic_login_spec.md). 등록 없이는 아무것도 못 건드리게 firstrun-ov가
+// 전체화면을 덮고, 등록되면 그 뒤로는 계정 고유 id로만 연결되므로 이름을 바꿔도 재생기록이
+// 안 끊긴다(main.js account-* IPC 참고).
+function updateAccountUi() {
+  if (!currentAccount) return;
+  $('account-name').textContent = currentAccount.name;
+  const d = (currentAccount.createdAt || '').slice(0, 10);
+  $('account-sub').textContent = d ? `${d} 등록 · 이 PC에만 저장` : '이 PC에만 저장';
+  $('cfg-personalize').checked = currentAccount.prefs?.personalizeRecommendations !== false;
+  $('personalize-sub').textContent = $('cfg-personalize').checked ? '재생 기록으로 믹스 추천 재정렬' : '꺼짐 · 유튜브 원래 순서 그대로';
+}
+
+const PIN_RE = /^[0-9]{4,6}$/;
+function clearFirstrunErr() {
+  $('firstrun-error').textContent = '';
+  ['login-name-input', 'login-pin-input', 'login-pin-confirm'].forEach(id => $(id).classList.remove('err'));
+}
+function firstrunFail(msg, focusId) {
+  $('firstrun-error').textContent = msg;
+  if (focusId) { $(focusId).classList.add('err'); $(focusId).focus(); }
+}
+$('firstrun-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  clearFirstrunErr();
+  const name = $('login-name-input').value.trim();
+  const pin = $('login-pin-input').value;
+  const pin2 = $('login-pin-confirm').value;
+  if (!name) return firstrunFail('이름을 입력해 주세요.', 'login-name-input');
+  if (!PIN_RE.test(pin)) return firstrunFail('간편 비밀번호는 숫자 4~6자리예요.', 'login-pin-input');
+  if (pin !== pin2) return firstrunFail('두 비밀번호가 서로 달라요.', 'login-pin-confirm');
+
+  const res = await window.api.registerAccount(name, pin);
+  if (!res.ok) return firstrunFail(res.error, 'login-name-input');
+  currentAccount = res.account;
+  updateAccountUi();
+  $('firstrun-ov').classList.remove('show');
+  toast('등록 완료 — ' + res.account.name + ' 님');
+});
+['login-name-input', 'login-pin-input', 'login-pin-confirm'].forEach(id => {
+  $(id).addEventListener('input', clearFirstrunErr);
+});
+['login-pin-input', 'login-pin-confirm', 'pw-current', 'pw-new', 'pw-new-confirm'].forEach(id => {
+  $(id).addEventListener('input', function () { this.value = this.value.replace(/[^0-9]/g, ''); });
+});
+
+$('btn-change-name').onclick = async () => {
+  const n = await openModal('이름 변경', currentAccount?.name || '');
+  if (n === null || !n.trim()) return;
+  const res = await window.api.changeAccountName(n.trim());
+  if (!res.ok) { toast(res.error); return; }
+  currentAccount.name = n.trim().slice(0, 12);
+  updateAccountUi();
+  toast('이름을 변경했어요');
+};
+
+let pwResetMode = false;
+function setPwResetMode(on) {
+  pwResetMode = on;
+  $('pw-current-group').style.display = on ? 'none' : '';
+  $('pw-reset-notice').style.display = on ? '' : 'none';
+  $('pw-modal-title').textContent = on ? '간편 비밀번호 초기화' : '간편 비밀번호 변경';
+}
+function openPw() {
+  $('pw-current').value = ''; $('pw-new').value = ''; $('pw-new-confirm').value = '';
+  $('pw-error').textContent = '';
+  setPwResetMode(false);
+  $('pw-modal').classList.add('show');
+  $('pw-current').focus();
+}
+function closePw() { $('pw-modal').classList.remove('show'); }
+$('btn-change-pin').onclick = openPw;
+$('pw-forgot').onclick = () => { setPwResetMode(true); $('pw-error').textContent = ''; $('pw-new').focus(); };
+$('pw-cancel').onclick = closePw;
+$('pw-modal').addEventListener('click', e => { if (e.target === $('pw-modal')) closePw(); });
+$('pw-ok').onclick = async () => {
+  $('pw-error').textContent = '';
+  const cur = $('pw-current').value, nw = $('pw-new').value, nw2 = $('pw-new-confirm').value;
+  if (!PIN_RE.test(nw)) { $('pw-error').textContent = '새 비밀번호는 숫자 4~6자리예요.'; $('pw-new').focus(); return; }
+  if (nw !== nw2) { $('pw-error').textContent = '새 비밀번호가 서로 달라요.'; $('pw-new-confirm').focus(); return; }
+  const res = await window.api.changeAccountPin(cur, nw, pwResetMode);
+  if (!res.ok) { $('pw-error').textContent = res.error; $('pw-current').focus(); return; }
+  closePw();
+  toast(pwResetMode ? '비밀번호를 초기화했어요' : '비밀번호를 변경했어요');
+};
+
+$('cfg-personalize').onchange = async function () {
+  await window.api.setPersonalize(this.checked);
+  if (currentAccount) currentAccount.prefs = { ...currentAccount.prefs, personalizeRecommendations: this.checked };
+  $('personalize-sub').textContent = this.checked ? '재생 기록으로 믹스 추천 재정렬' : '꺼짐 · 유튜브 원래 순서 그대로';
+};
+
 // ── stream cache ──────────────────────────────────────────────────────────────
 async function getStream(ytUrl) {
   const now = Date.now();
@@ -154,6 +247,7 @@ function applyTheme(theme) {
 
 // ── settings overlay ──────────────────────────────────────────────────────────
 async function openSettings() {
+  updateAccountUi();
   $('cfg-quality').value = config.quality || '192';
   $('cfg-theme').value = config.theme || 'default';
   $('cfg-auto').checked = !!config.autoplay;
@@ -918,9 +1012,12 @@ window.api.onUpdateNotAvailable(() => {
   $('about-check-update').disabled = false;
   $('about-update-status').textContent = '최신 버전 사용 중입니다.';
 });
-window.api.onUpdateError(() => {
+window.api.onUpdateError((msg) => {
   $('about-check-update').disabled = false;
   $('about-update-status').textContent = '업데이트 확인 실패, 잠시 후 다시 시도해주세요.';
+  // 실제 원인(네트워크 오류/다운로드 실패 등)을 그냥 버리고 있었음 — 콘솔에라도 남겨서
+  // 다음에 같은 리포트 받으면 원인 추적 가능하게(형 리포트로 발견, 2026-08-02)
+  if (msg) console.error('[K-Music] 업데이트 오류:', msg);
 });
 window.api.onUpdateDownloaded(() => {
   $('about-update-status').textContent = '다운로드 완료! 재시작하면 설치돼요.';
@@ -963,6 +1060,14 @@ $('btn-pin').onclick = async function() {
 
 // ── init ──────────────────────────────────────────────────────────────────────
 (async () => {
+  currentAccount = await window.api.getActiveAccount();
+  if (!currentAccount) {
+    $('firstrun-ov').classList.add('show');
+    $('login-name-input').focus();
+  } else {
+    updateAccountUi();
+  }
+
   config = await window.api.getConfig();
   playlists = await window.api.getPlaylists();
   if (!playlists?.length) playlists=[{id:uid(),name:'My Playlist',tracks:[]}];

@@ -2,14 +2,18 @@ const { app, BrowserWindow, ipcMain, shell, Tray, Menu, nativeImage, screen, cli
 const { autoUpdater } = require('electron-updater');
 const path = require('path');
 const fs = require('fs');
+const crypto = require('crypto');
 const { execFile, spawn } = require('child_process');
 
 const DATA_DIR = path.join(app.getPath('userData'), 'kris-music');
 const CONFIG_FILE = path.join(DATA_DIR, 'config.json');
 const PLAYLISTS_FILE = path.join(DATA_DIR, 'playlists.json');
 const LYRICS_CACHE_FILE = path.join(DATA_DIR, 'lyrics-cache.json');
+const ACCOUNTS_FILE = path.join(DATA_DIR, 'accounts.json');
+const HISTORY_DIR = path.join(DATA_DIR, 'history');
 
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+if (!fs.existsSync(HISTORY_DIR)) fs.mkdirSync(HISTORY_DIR, { recursive: true });
 
 function loadConfig() {
   try { return JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8')); } catch { return {}; }
@@ -30,6 +34,61 @@ function loadLyricsCache() {
 }
 function saveLyricsCache(c) {
   fs.writeFileSync(LYRICS_CACHE_FILE, JSON.stringify(c, null, 2));
+}
+
+// ── 계정(로그인) ──────────────────────────────────────────────────────────────
+// 2026-08-07 오푸스 설계(kmusic_login_spec.md) 기반. accounts는 지금 1명이라도 배열로 두고
+// activeAccountId를 배열 밖 필드로 분리 — 계정 전환 = 필드 하나 교체(계정 안에 isActive를
+// 두면 둘 다 true가 되는 버그가 필연적으로 생김). id는 이름과 분리된 불변 키라 이름을
+// 바꿔도 재생기록(history/<id>.json)이 끊기지 않는다.
+// PIN은 진짜 보안이 아니라 "같은 PC 쓰는 다른 사람과 기록을 안 섞기 위한 칸막이" 수준이라고
+// 설계 문서/등록 화면 문구에 명시했음 — 그래서 초기화도 별도 신원확인 없이 허용한다.
+function uid() { return 'acc_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
+
+function hashPin(pin) {
+  const salt = crypto.randomBytes(16).toString('hex');
+  const digest = crypto.createHash('sha256').update(salt + pin).digest('hex');
+  return `sha256$${salt}$${digest}`;
+}
+function verifyPin(pin, stored) {
+  if (typeof stored !== 'string') return false;
+  const parts = stored.split('$');
+  if (parts.length !== 3 || parts[0] !== 'sha256') return false;
+  const digest = crypto.createHash('sha256').update(parts[1] + pin).digest('hex');
+  // 타이밍 공격 자체가 의미 없는 로컬 단일사용자 앱이지만, 길이가 다르면 timingSafeEqual이
+  // 예외를 던지므로 그 경우만 가드
+  if (digest.length !== parts[2].length) return false;
+  return crypto.timingSafeEqual(Buffer.from(digest), Buffer.from(parts[2]));
+}
+
+// 쓰는 도중 앱이 죽어도 파일이 반쪽짜리로 깨지지 않게 임시파일에 쓰고 rename
+function writeJsonAtomic(file, data) {
+  const tmp = file + '.tmp' + process.pid;
+  fs.writeFileSync(tmp, JSON.stringify(data, null, 2));
+  fs.renameSync(tmp, file);
+}
+
+function loadAccounts() {
+  try {
+    const data = JSON.parse(fs.readFileSync(ACCOUNTS_FILE, 'utf8'));
+    if (!Array.isArray(data.accounts)) return null;
+    return data;
+  } catch { return null; }
+}
+function saveAccounts(data) { writeJsonAtomic(ACCOUNTS_FILE, data); }
+
+function historyFile(accountId) { return path.join(HISTORY_DIR, `${accountId}.json`); }
+function loadHistory(accountId) {
+  try { return JSON.parse(fs.readFileSync(historyFile(accountId), 'utf8')); } catch {
+    return { schemaVersion: 1, accountId, updatedAt: new Date().toISOString(), tracks: {}, channels: {}, mixSeeds: {} };
+  }
+}
+function saveHistory(h) { writeJsonAtomic(historyFile(h.accountId), h); }
+
+function getActiveAccount() {
+  const data = loadAccounts();
+  if (!data) return null;
+  return data.accounts.find(a => a.id === data.activeAccountId) || null;
 }
 
 // ── 가사(lrclib.net) ──────────────────────────────────────────────────────────
@@ -580,7 +639,20 @@ if (!gotLock) {
       }
     }, 3000);
     if (app.isPackaged) {
-      autoUpdater.checkForUpdatesAndNotify();
+      // allowPrerelease=false 없으면 테스트빌드(버전 -N 접미사)가 자동으로 allowPrerelease=true가
+      // 되고, 그 상태에서는 GitHubProvider가 정식(비프리릴리즈) 릴리즈를 찾지 못해 "업데이트 확인"이
+      // 영구 실패한다(K-Tube 2026-08-06 실측, check_electron_autoupdate_safeguard.py 훅 근거).
+      // 반대로 이 값을 켜두고 시작 시 자동확인까지 그대로 두면, 테스트빌드가 이미 배포된 정식판을
+      // "새 버전"으로 착각해서 자동으로 덮어써버리는 사고가 K-Memo에서 실제로 났었다(2026-08-07,
+      // 1.4.2-1이 앱 켜자마자 1.4.2로 자동 다운그레이드됨) — 그래서 시작 시 자동확인은 테스트빌드일
+      // 때만 건너뛰고, 수동 "업데이트 확인" 버튼은 그대로 둔다.
+      autoUpdater.allowPrerelease = false;
+      const isTestBuild = /-\d+$/.test(app.getVersion());
+      if (isTestBuild) {
+        console.log('[autoUpdater] 테스트빌드(' + app.getVersion() + ') — 시작 시 자동 업데이트 확인 건너뜀');
+      } else {
+        autoUpdater.checkForUpdatesAndNotify();
+      }
     }
   });
 }
@@ -627,6 +699,77 @@ ipcMain.handle('save-config', (_, cfg) => {
 });
 ipcMain.handle('get-playlists', () => loadPlaylists());
 ipcMain.handle('save-playlists', (_, pl) => { savePlaylists(pl); return true; });
+
+// ── 계정 IPC ───────────────────────────────────────────────────────────────────
+ipcMain.handle('account-get-active', () => {
+  const account = getActiveAccount();
+  if (!account) return null;
+  // pinHash는 렌더러로 절대 내보내지 않는다
+  const { pinHash, ...safe } = account;
+  return safe;
+});
+
+ipcMain.handle('account-register', (_, name, pin) => {
+  name = String(name || '').trim().slice(0, 12);
+  pin = String(pin || '');
+  if (!name) return { ok: false, error: '이름을 입력해 주세요.' };
+  if (!/^[0-9]{4,6}$/.test(pin)) return { ok: false, error: '간편 비밀번호는 숫자 4~6자리예요.' };
+
+  let data = loadAccounts();
+  if (!data) data = { schemaVersion: 1, activeAccountId: null, accounts: [] };
+  const now = new Date().toISOString();
+  const id = uid();
+  const account = {
+    id, name, pinHash: hashPin(pin),
+    pinSetAt: now, createdAt: now, lastActiveAt: now,
+    prefs: { personalizeRecommendations: true, requirePinOnLaunch: false }
+  };
+  data.accounts.push(account);
+  data.activeAccountId = id;
+  saveAccounts(data);
+  saveHistory({ schemaVersion: 1, accountId: id, updatedAt: now, tracks: {}, channels: {}, mixSeeds: {} });
+
+  const { pinHash, ...safe } = account;
+  return { ok: true, account: safe };
+});
+
+ipcMain.handle('account-change-name', (_, newName) => {
+  newName = String(newName || '').trim().slice(0, 12);
+  if (!newName) return { ok: false, error: '이름을 입력해 주세요.' };
+  const data = loadAccounts();
+  const account = data && data.accounts.find(a => a.id === data.activeAccountId);
+  if (!account) return { ok: false, error: '등록된 계정이 없어요.' };
+  account.name = newName;
+  saveAccounts(data);
+  return { ok: true };
+});
+
+// resetMode가 true면 currentPin 검증을 건너뛴다("비밀번호를 잊으셨나요? 초기화" 경로 —
+// 로컬 전용 앱이라 이메일 인증 같은 진짜 복구 수단이 없고, 4~6자리 PIN 자체가 애초에
+// "같은 PC 다른 사람과 안 섞이기" 수준의 칸막이라 신원확인 없는 초기화도 설계상 허용함)
+ipcMain.handle('account-change-pin', (_, currentPin, newPin, resetMode) => {
+  newPin = String(newPin || '');
+  if (!/^[0-9]{4,6}$/.test(newPin)) return { ok: false, error: '새 비밀번호는 숫자 4~6자리예요.' };
+  const data = loadAccounts();
+  const account = data && data.accounts.find(a => a.id === data.activeAccountId);
+  if (!account) return { ok: false, error: '등록된 계정이 없어요.' };
+  if (!resetMode && !verifyPin(String(currentPin || ''), account.pinHash)) {
+    return { ok: false, error: '현재 비밀번호가 맞지 않아요.' };
+  }
+  account.pinHash = hashPin(newPin);
+  account.pinSetAt = new Date().toISOString();
+  saveAccounts(data);
+  return { ok: true };
+});
+
+ipcMain.handle('account-set-personalize', (_, on) => {
+  const data = loadAccounts();
+  const account = data && data.accounts.find(a => a.id === data.activeAccountId);
+  if (!account) return false;
+  account.prefs.personalizeRecommendations = !!on;
+  saveAccounts(data);
+  return true;
+});
 
 ipcMain.handle('get-stream', async (_, ytUrl, quality) => {
   try {

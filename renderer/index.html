@@ -618,6 +618,82 @@ body.lyrics-mode .lyr-preview { display: flex; }
 .m-cancel { background: transparent; color: var(--text); }
 .m-ok { background: var(--prog); color: #000; }
 
+/* ── 계정(로그인) — 2026-08-07, kmusic_login_spec.md 오푸스 설계 + 형 피드백(PIN 4~6자리,
+   비밀번호 초기화, 이름 변경) 반영. 기존 .settings-row/.set-group-lab/.modal-card 그대로 재사용 ── */
+.firstrun-ov {
+  position: fixed; inset: 0; z-index: 999; display: none; align-items: center; justify-content: center;
+  background: linear-gradient(158deg, var(--panel) 0%, var(--card) 48%, var(--bg) 100%);
+}
+.firstrun-ov.show { display: flex; }
+.fr-card { width: 320px; padding: 0 28px; }
+.fr-brand { text-align: center; margin-bottom: 28px; }
+.fr-mark {
+  width: 62px; height: 62px; margin: 0 auto 16px; border-radius: 16px; display: flex; align-items: center;
+  justify-content: center; font-family: var(--mono); font-weight: 800; font-size: 26px; color: #fff;
+  background: linear-gradient(150deg, var(--prog), #C8341C);
+}
+[data-theme="ambient"] .fr-mark, [data-theme="midnight"] .fr-mark,
+[data-theme="vgraphite"] .fr-mark, [data-theme="vpaper"] .fr-mark { background-image: linear-gradient(150deg, #FF5C3D, #C8341C); }
+.fr-title { font-family: var(--mono); font-size: 13px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--text); margin-bottom: 10px; }
+.fr-lead { font-size: 12.5px; color: var(--text2); line-height: 1.6; }
+.fr-field { margin-bottom: 18px; }
+.fr-group-lab { font-family: var(--mono); font-size: 10px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--prog); margin-bottom: 8px; }
+.fr-input {
+  width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+  padding: 10px 14px; font-size: 13px; color: var(--text); outline: none; font-family: var(--sans);
+  transition: border-color 0.2s;
+}
+.fr-input.err { border-color: #E0483A; }
+.fr-input:focus { border-color: var(--prog); }
+.fr-pin-pair { display: flex; gap: 10px; }
+.fr-pin-pair .fr-input { letter-spacing: 0.3em; }
+.fr-hint { font-size: 11px; color: var(--text3); line-height: 1.5; margin-top: 6px; }
+#firstrun-error { font-size: 11.5px; color: #E0483A; min-height: 17px; margin-bottom: 10px; line-height: 1.5; }
+.fr-submit {
+  width: 100%; background: var(--prog); color: #000; border: none; border-radius: 8px; padding: 12px;
+  font-size: 13px; font-weight: 700; cursor: pointer; font-family: inherit; transition: filter 0.15s;
+}
+.fr-submit:hover { filter: brightness(1.06); }
+[data-theme="ambient"] .fr-submit, [data-theme="midnight"] .fr-submit,
+[data-theme="vgraphite"] .fr-submit, [data-theme="vpaper"] .fr-submit {
+  background: linear-gradient(145deg, var(--prog-hi) 0%, var(--prog) 100%);
+  box-shadow: 0 8px 18px -9px var(--prog), inset 0 1px 0 rgba(255,255,255,0.3);
+}
+.fr-foot { text-align: center; font-size: 10.5px; color: var(--text3); margin-top: 16px; line-height: 1.5; }
+
+.srow-btns { display: flex; flex-direction: column; gap: 6px; flex-shrink: 0; }
+.srow-btn {
+  background: linear-gradient(180deg, var(--surf-hi), var(--surf-lo)); border: none; border-radius: 6px;
+  box-shadow: inset 0 1px 0 var(--sheen-hi), inset 0 -1px 2px var(--sheen-lo), 0 1px 2px rgba(0,0,0,0.15);
+  padding: 8px 12px; font-size: 12px; font-weight: 600; color: var(--text); cursor: pointer;
+  font-family: inherit; flex-shrink: 0; transition: filter 0.15s;
+}
+.srow-btn:hover { filter: brightness(1.08); }
+[data-theme="ambient"] .srow-btn, [data-theme="midnight"] .srow-btn,
+[data-theme="vgraphite"] .srow-btn, [data-theme="vpaper"] .srow-btn {
+  background: var(--bg); border: 1px solid var(--surf-lo); border-radius: 7px;
+  box-shadow: inset 0 1px 2px var(--sheen-lo);
+}
+
+.pw-lab { font-size: 11px; color: var(--text3); margin-bottom: 6px; line-height: 1.5; }
+/* 비밀번호 변경/이름 변경 둘 다 설정 패널(z-index 300)이 이미 열려 있는 상태에서 그 위에 뜨는
+   모달이라, .modal-ov 기본값(200)보다 낮으면 설정 패널 뒤에 완전히 가려진다(2026-08-07 Playwright로
+   실제 발견 — 기존 #modal은 지금까지 설정 패널 밖에서만 열려서 이 충돌이 드러난 적이 없었음.
+   "이름 변경" 버튼이 기존 #modal(openModal())을 그대로 재사용하면서 처음 겹치게 됨). */
+#pw-modal, #modal { z-index: 350; }
+#pw-modal .modal-card input { margin-bottom: 14px; letter-spacing: 0.3em; }
+#pw-error { font-size: 11.5px; color: #E0483A; min-height: 17px; margin: -4px 0 14px; line-height: 1.5; }
+.pw-forgot {
+  background: none; border: none; padding: 0; margin: -6px 0 14px; display: block;
+  font-family: inherit; font-size: 11px; color: var(--text3); text-decoration: underline;
+  cursor: pointer; transition: color 0.15s;
+}
+.pw-forgot:hover { color: var(--prog); }
+.pw-reset-notice {
+  font-size: 11.5px; color: var(--text2); line-height: 1.5; background: var(--bg);
+  border: 1px solid var(--border); border-radius: 6px; padding: 10px 12px; margin: -4px 0 14px;
+}
+
 /* ── SETTINGS ── */
 .settings-overlay { z-index: 300; }
 .settings-card {
@@ -1102,6 +1178,35 @@ select option { background: var(--card); color: var(--text); }
 </head>
 <body>
 
+<!-- 계정 최초 등록 (2026-08-07 추가) — accounts.json이 없을 때만 app.js가 .show를 붙인다 -->
+<div class="firstrun-ov" id="firstrun-ov">
+  <div class="fr-card">
+    <div class="fr-brand">
+      <div class="fr-mark">K</div>
+      <div class="fr-title">Welcome</div>
+      <div class="fr-lead">이름과 간편 비밀번호를 한 번만 등록하면<br>재생 기록이 내 취향으로 쌓이기 시작해요.</div>
+    </div>
+    <form class="fr-form" id="firstrun-form" autocomplete="off" novalidate>
+      <div class="fr-field">
+        <div class="fr-group-lab">이름</div>
+        <input class="fr-input" id="login-name-input" type="text" placeholder="이름" maxlength="12" autocomplete="off" spellcheck="false"/>
+        <div class="fr-hint">플레이어와 설정 화면에 표시되는 이름이에요.</div>
+      </div>
+      <div class="fr-field">
+        <div class="fr-group-lab">간편 비밀번호</div>
+        <div class="fr-pin-pair">
+          <input class="fr-input" id="login-pin-input" type="password" placeholder="숫자 4~6자리" inputmode="numeric" maxlength="6" autocomplete="new-password"/>
+          <input class="fr-input" id="login-pin-confirm" type="password" placeholder="다시 한 번" inputmode="numeric" maxlength="6" autocomplete="new-password"/>
+        </div>
+        <div class="fr-hint">금융 수준 보안이 아니라, 같은 PC를 쓰는 다른 사람과 기록을 섞지 않기 위한 잠금이에요.</div>
+      </div>
+      <div id="firstrun-error" role="alert" aria-live="polite"></div>
+      <button class="fr-submit" id="login-submit" type="submit">시작하기</button>
+    </form>
+    <div class="fr-foot">등록 정보는 이 PC에만 저장되고 어디로도 전송되지 않아요.</div>
+  </div>
+</div>
+
 <div class="header">
   <div class="app-title" id="app-title" title="더블클릭하면 세로로 꽉 채워요">
     <span class="brand-mark">K</span>
@@ -1236,6 +1341,29 @@ select option { background: var(--card); color: var(--text); }
     </div>
     <div class="settings-body">
       <div>
+        <div class="set-group-lab" id="set-group-account">내 계정</div>
+        <div class="settings-row" id="account-row">
+          <div class="srow-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div>
+          <div class="srow-text">
+            <div class="srow-label" id="account-name">—</div>
+            <div class="srow-sub" id="account-sub">—</div>
+          </div>
+          <div class="srow-btns">
+            <button class="srow-btn" id="btn-change-name" type="button">이름 변경</button>
+            <button class="srow-btn" id="btn-change-pin" type="button">비밀번호 변경</button>
+          </div>
+        </div>
+        <div class="settings-row">
+          <div class="srow-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 15.09 8.26 22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg></div>
+          <div class="srow-text"><div class="srow-label">추천 개인화</div><div class="srow-sub" id="personalize-sub">재생 기록으로 믹스 추천 재정렬</div></div>
+          <label class="tog">
+            <input type="checkbox" id="cfg-personalize" checked/>
+            <div class="tog-track"></div>
+            <div class="tog-thumb"></div>
+          </label>
+        </div>
+      </div>
+      <div>
         <div class="set-group-lab">오디오</div>
         <div class="settings-row">
           <div class="srow-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 14h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7a9 9 0 0 1 18 0v7a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3"/></svg></div>
@@ -1308,6 +1436,27 @@ select option { background: var(--card); color: var(--text); }
     <div class="modal-btns">
       <button class="m-cancel" id="modal-cancel">취소</button>
       <button class="m-ok" id="modal-ok">확인</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-ov" id="pw-modal">
+  <div class="modal-card">
+    <h3 id="pw-modal-title">간편 비밀번호 변경</h3>
+    <div id="pw-current-group">
+      <div class="pw-lab">현재 비밀번호</div>
+      <input type="password" id="pw-current" placeholder="숫자 4~6자리" inputmode="numeric" maxlength="6" autocomplete="current-password"/>
+      <button type="button" class="pw-forgot" id="pw-forgot">비밀번호를 잊으셨나요? 초기화</button>
+    </div>
+    <div class="pw-reset-notice" id="pw-reset-notice" style="display:none;">현재 비밀번호 확인 없이 초기화해요. 아래에 새 비밀번호만 입력하면 바로 바뀌어요.</div>
+    <div class="pw-lab">새 비밀번호</div>
+    <input type="password" id="pw-new" placeholder="숫자 4~6자리" inputmode="numeric" maxlength="6" autocomplete="new-password"/>
+    <div class="pw-lab">새 비밀번호 확인</div>
+    <input type="password" id="pw-new-confirm" placeholder="다시 한 번" inputmode="numeric" maxlength="6" autocomplete="new-password"/>
+    <div id="pw-error" role="alert" aria-live="polite"></div>
+    <div class="modal-btns">
+      <button class="m-cancel" id="pw-cancel" type="button">취소</button>
+      <button class="m-ok" id="pw-ok" type="button">변경</button>
     </div>
   </div>
 </div>

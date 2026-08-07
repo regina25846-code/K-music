@@ -26,7 +26,7 @@ contextBridge.exposeInMainWorld('api', {
   onUpdateAvailable: (cb) => ipcRenderer.on('update-available', cb),
   onUpdateDownloaded: (cb) => ipcRenderer.on('update-downloaded', cb),
   onUpdateNotAvailable: (cb) => ipcRenderer.on('update-not-available', cb),
-  onUpdateError: (cb) => ipcRenderer.on('update-error', cb),
+  onUpdateError: (cb) => ipcRenderer.on('update-error', (_, msg) => cb(msg)),
   installUpdate: () => ipcRenderer.invoke('install-update'),
   getAppVersion: () => ipcRenderer.invoke('get-app-version'),
   checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
@@ -37,5 +37,11 @@ contextBridge.exposeInMainWorld('api', {
   tabDragMove: (dy) => ipcRenderer.invoke('tab-drag-move', dy),
   tabDragEnd: (dy) => ipcRenderer.invoke('tab-drag-end', dy),
   copyText: (text) => ipcRenderer.invoke('copy-text', text),
-  onSetTheme: (cb) => ipcRenderer.on('set-theme', (_, theme) => cb(theme))
+  onSetTheme: (cb) => ipcRenderer.on('set-theme', (_, theme) => cb(theme)),
+  // 계정(2026-08-07 추가)
+  getActiveAccount: () => ipcRenderer.invoke('account-get-active'),
+  registerAccount: (name, pin) => ipcRenderer.invoke('account-register', name, pin),
+  changeAccountName: (newName) => ipcRenderer.invoke('account-change-name', newName),
+  changeAccountPin: (currentPin, newPin, resetMode) => ipcRenderer.invoke('account-change-pin', currentPin, newPin, resetMode),
+  setPersonalize: (on) => ipcRenderer.invoke('account-set-personalize', on)
 });

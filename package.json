@@ -1,11 +1,12 @@
 {
   "name": "kris-music",
-  "version": "2.1.0",
+  "version": "2.1.0-1",
   "description": "K-Music Player — Lightweight YouTube Music Player",
+  "author": "KrisB",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "build": "electron-builder --win --x64"
+    "build": "electron-builder --win --x64 --publish never"
   },
   "build": {
     "appId": "com.kris.music",
@@ -49,7 +50,7 @@
     },
     "nsis": {
       "oneClick": false,
-      "allowToChangeInstallationDirectory": false,
+      "allowToChangeInstallationDirectory": true,
       "runAfterFinish": true,
       "include": "build/installer.nsh",
       "installerIcon": "assets/icon.ico",

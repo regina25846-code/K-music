@@ -24,22 +24,11 @@
 !endif
 
 !macro preInit
-  ; ===== 설치 흐름 표준 1번: 이미 설치돼있으면 제거하기/제거하지 않기부터 선택 =====
-  ; BUILD_UNINSTALLER(제거 프로그램 자체를 빌드하는 내부 단계)에서는 이 블록을 건너뜀 —
-  ; 안 그러면 실제 제거 프로그램을 실행할 때도 "이미 설치돼있는데 제거할까요?" 라는
-  ; 앞뒤가 안 맞는 질문이 또 뜨게 됨.
-  !ifndef BUILD_UNINSTALLER
-    ReadRegStr $9 HKCU "${UNINSTALL_REGISTRY_KEY}" "UninstallString"
-    StrCmp $9 "" step1_notinstalled
-      ReadRegStr $9 HKLM "${UNINSTALL_REGISTRY_KEY}" "UninstallString"
-    step1_notinstalled:
-    StrCmp $9 "" step1_done
-      MessageBox MB_YESNO|MB_ICONQUESTION "K-Music이 이미 설치되어 있습니다.$\n기존 버전을 제거하시겠습니까?$\n$\n예: 제거하기(제거 후 Setup을 다시 실행해서 새로 설치)$\n아니오: 제거하지 않고 계속 설치(업데이트)" IDYES step1_doRemove IDNO step1_done
-      step1_doRemove:
-        ExecWait '$9 _?=$INSTDIR'
-        Quit
-    step1_done:
-  !endif
+  ; ===== 설치 흐름 표준 1번(제거/유지 선택 프롬프트)은 2026-08-07에 뺌 =====
+  ; 전자빌더 기본 동작인 "재설치/업그레이드"(덮어쓰기)가 크롬/VS코드 같은 정상적인
+  ; 프로그램들도 쓰는 방식이라 데이터 손실 없이 안전하고, 실제로 필요해서 넣은 기능이
+  ; 아니라 문서 기준 맞추려고 넣은 거였음. K-Tube에서 이 프롬프트가 실기 테스트에서
+  ; 안 뜨는 버그를 원인 추적하다가 기능 자체가 불필요하다고 판단해서 3앱 전부 제거(형 컨펌).
 
   ; ===== 설치 흐름 표준 3번: K-Music 실행 중인지 확인 =====
   ; (FindWindow는 트레이 상주 시 창 제목이 없어서 못 잡던 문제가 있어서
