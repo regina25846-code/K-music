@@ -769,6 +769,30 @@ body.lyrics-mode .lyr-preview { display: flex; }
   width: 180px; font-family: var(--mono);
 }
 .srow-ctrl input[type="password"]::placeholder, .srow-ctrl input[type="text"]::placeholder { color: var(--text3); }
+
+/* 유튜브 API 키 행 — 입력칸+확인버튼+가이드링크가 한 줄에 다 들어가면 줄바꿈이 심해서
+   두 번째 줄로 따로 뺀 전용 레이아웃(형 요청, 2026-08-08) */
+.yt-api-row { align-items: flex-start; }
+.yt-api-line2 { display: flex; align-items: center; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+.yt-api-line2 input[type="password"] {
+  flex: 1 1 140px; min-width: 120px;
+  background: linear-gradient(180deg, var(--surf-hi), var(--surf-lo)); border: none; border-radius: 6px;
+  box-shadow: inset 0 1px 0 var(--sheen-hi), inset 0 -1px 2px var(--sheen-lo), 0 1px 2px rgba(0,0,0,0.15);
+  padding: 8px 12px; font-size: 12px; color: var(--text); outline: none; font-family: var(--mono);
+}
+.yt-api-line2 input[type="password"]::placeholder { color: var(--text3); }
+.yt-api-line2 .srow-btn { padding: 8px 14px; }
+.yt-api-line2 a { font-size: 12px; color: var(--prog); text-decoration: none; white-space: nowrap; }
+.yt-api-line2 a:hover { text-decoration: underline; }
+.yt-api-status { font-size: 11px; margin-top: 6px; min-height: 14px; }
+.yt-api-status.ok { color: #2e7d32; }
+.yt-api-status.err { color: #c62828; }
+[data-theme="ambient"] .yt-api-line2 input, [data-theme="midnight"] .yt-api-line2 input,
+[data-theme="vgraphite"] .yt-api-line2 input, [data-theme="vpaper"] .yt-api-line2 input {
+  background: var(--bg); border: 1px solid var(--surf-lo); border-radius: 7px;
+  padding: 6px 10px; color: var(--text); font-family: var(--sans);
+  box-shadow: inset 0 1px 2px var(--sheen-lo);
+}
 /* dropdown option popups are OS-rendered on Windows and ignore gradient backgrounds —
    force a solid, explicitly-contrasted color pair so option text stays readable */
 select option { background: var(--card); color: var(--text); }
@@ -1396,11 +1420,17 @@ select option { background: var(--card); color: var(--text); }
           <div class="srow-text"><div class="srow-label">추천 제외한 채널</div><div class="srow-sub" id="blocked-ch-sub">0개</div></div>
           <button class="srow-btn" id="btn-blocked-channels" type="button">관리</button>
         </div>
-        <div class="settings-row">
+        <div class="settings-row yt-api-row">
           <div class="srow-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg></div>
-          <div class="srow-text"><div class="srow-label">유튜브 API 키</div><div class="srow-sub">추천 조회수 가산점 · 선택 입력, 본인 키만 사용 · <a href="#" id="yt-api-key-guide" style="color:var(--prog);">발급 및 설정방법</a></div></div>
-          <div class="srow-ctrl">
-            <input type="password" id="cfg-yt-api-key" placeholder="미입력 시 조회수 가산점 없음" autocomplete="off"/>
+          <div class="srow-text">
+            <div class="srow-label">유튜브 API 키</div>
+            <div class="srow-sub">추천 조회수 가산점 · 선택 입력, 본인 키만 사용</div>
+            <div class="yt-api-line2">
+              <input type="password" id="cfg-yt-api-key" placeholder="미입력 시 조회수 가산점 없음" autocomplete="off"/>
+              <button class="srow-btn" id="btn-yt-api-check" type="button">확인</button>
+              <a href="#" id="yt-api-key-guide">발급 및 설정방법</a>
+            </div>
+            <div class="yt-api-status" id="yt-api-status"></div>
           </div>
         </div>
       </div>

@@ -396,6 +396,8 @@ async function openSettings() {
   $('cfg-resume').checked = !!config.resume;
   $('auto-sub').textContent = config.autoplay ? '켜짐' : '꺼짐';
   $('cfg-yt-api-key').value = config.ytApiKey || '';
+  $('yt-api-status').textContent = '';
+  $('yt-api-status').className = 'yt-api-status';
   $('cfg-startup').checked = await window.api.getLoginItem();
   $('settings-ov').classList.add('show');
 }
@@ -407,6 +409,25 @@ $('cfg-auto').onchange = function() { $('auto-sub').textContent = this.checked ?
 $('yt-api-key-guide').onclick = (e) => {
   e.preventDefault();
   window.api.openExternal('https://regina25846-code.github.io/K-music/#api-guide');
+};
+$('cfg-yt-api-key').oninput = () => { $('yt-api-status').textContent = ''; $('yt-api-status').className = 'yt-api-status'; };
+$('btn-yt-api-check').onclick = async () => {
+  const key = $('cfg-yt-api-key').value.trim();
+  const statusEl = $('yt-api-status');
+  const btn = $('btn-yt-api-check');
+  if (!key) { statusEl.textContent = '키를 먼저 입력해줘'; statusEl.className = 'yt-api-status err'; return; }
+  btn.disabled = true;
+  statusEl.textContent = '확인 중...';
+  statusEl.className = 'yt-api-status';
+  const res = await window.api.testYtApiKey(key);
+  btn.disabled = false;
+  if (res.ok) {
+    statusEl.textContent = '✓ 정상 작동';
+    statusEl.className = 'yt-api-status ok';
+  } else {
+    statusEl.textContent = '✗ 키 오류 — 다시 확인해줘';
+    statusEl.className = 'yt-api-status err';
+  }
 };
 $('settings-save').onclick = async () => {
   const theme = $('cfg-theme').value;

@@ -957,6 +957,19 @@ ipcMain.handle('get-config', () => loadConfig());
 ipcMain.handle('open-external', (_, url) => {
   if (typeof url === 'string' && /^https:\/\//.test(url)) shell.openExternal(url);
 });
+
+// 설정 화면 "확인" 버튼용 — 저장 여부와 무관하게 지금 입력창에 있는 값을 바로 테스트한다.
+// 아무 유효한 영상 id 하나(dQw4w9WgXcQ)로 videos.list를 호출해서, 키가 유효하면 200으로
+// 응답이 오고(그 영상이 실제로 존재하는지는 중요하지 않음) 무효면 400이 온다는 점만 이용
+// — 형이 "저장 눌러야만 확인되는 게 불편하다"고 지적해서 추가(2026-08-08).
+ipcMain.handle('test-yt-api-key', async (_, apiKey) => {
+  try {
+    const viewCounts = await fetchViewCounts(['dQw4w9WgXcQ'], apiKey);
+    return { ok: Object.keys(viewCounts).length > 0 };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+});
 ipcMain.handle('save-config', (_, cfg) => {
   const prev = loadConfig();
   // 렌더러는 앱 시작 시 한 번 읽은 config 사본을 계속 들고 있다가 매번 통째로 다시 보냄(재생위치
