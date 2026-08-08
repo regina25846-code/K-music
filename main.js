@@ -110,7 +110,11 @@ function parseArtistTitle(rawTitle, channel) {
     .replace(/\s+/g, ' ')
     .trim();
 
-  const sepMatch = t.match(/^(.+?)\s*[-–—]\s*(.+)$/);
+  // "ARTIST _ 제목" 형식(1theK 같은 MV 채널이 대시 대신 언더스코어를 구분자로 씀 — 형 실사용 중
+  // 발견: "[MV] ZICO(지코) _ Any song?"이 아티스트를 채널명("1theK")으로 잘못 뽑아서 가사 검색이
+  // 안 됨, 2026-08-08). 언더스코어는 단어 중간에도 흔히 쓰이니 대시(공백 없어도 매치)와 달리
+  // 앞뒤에 공백이 실제로 있을 때만 구분자로 인정해서 오탐을 줄인다.
+  const sepMatch = t.match(/^(.+?)\s*[-–—]\s*(.+)$/) || t.match(/^(.+?)\s+_\s+(.+)$/);
   if (sepMatch) {
     return { artist: sepMatch[1].trim(), title: sepMatch[2].trim().replace(TRAILING_TAG_RE, '').trim() };
   }
@@ -392,6 +396,55 @@ function enrichItem(item) {
   const { artist } = parseArtistTitle(item.title || '', item.channel || '');
   const decade = item.releaseYear ? `${Math.floor(item.releaseYear / 10) * 10}s` : null;
   return { ...item, artist: artist || null, decade };
+}
+
+// ── 조회수 기반 인기도 가산점(YouTube Data API, 사용자 개인 키 필요) ────────────────
+// 형 요청(2026-08-08): "동시대 중 조회수 높은 곡"에 가산점, 장르/성별은 별도 다양성 신호로.
+// 처음엔 yt-dlp로 영상 페이지를 직접 긁어서 조회수를 뽑으려 했는데, 실측해보니(개당 12초,
+// 3개 동시 요청 시 개당 23~25초로 오히려 느려짐 + 10개 완전동시 요청은 전부 타임아웃)
+// 유튜브가 동시 요청을 감지해서 늦추는 걸로 보여 실용성이 없었다. 유튜브 공식 Data API
+// (videos.list)는 최대 50개 id를 한 번에 배치 조회해서 초 단위로 응답하므로 이 방식으로
+// 교체. 단 앱에 키를 내장하면 안 됨 — K-Music은 asar:false라 main.js가 설치 폴더에 평문
+// 그대로 노출되고(K-Tube/K-Memo도 동일하게 확인됨), 형이 "공개배포 전제로 보안 문제 될
+// 만한 건 안 만들었으면 좋겠다"고 명시 요청해서, 사용자가 설정 화면에서 자기 키를 직접
+// 입력하는 방식으로만 지원한다. 키가 없으면 이 함수는 호출되지 않고 기존 취향 기반
+// 순서가 그대로 유지된다(기능 저하는 있어도 추천 자체가 막히진 않음).
+async function fetchViewCounts(ids, apiKey) {
+  if (!apiKey || !ids.length) return {};
+  const url = `https://www.googleapis.com/youtube/v3/videos?part=statistics&id=${ids.join(',')}&key=${encodeURIComponent(apiKey)}`;
+  const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+  if (!res.ok) throw new Error(`YouTube Data API HTTP ${res.status}`);
+  const data = await res.json();
+  const map = {};
+  for (const item of data.items || []) {
+    map[item.id] = Number(item.statistics?.viewCount) || 0;
+  }
+  return map;
+}
+
+// 절대 조회수로 비교하면 최신곡이 무조건 유리해지므로(형 요청: "동시대 중에 조회수 높은
+// 거"), 반드시 같은 decade 그룹 안에서만 상대 비교한다. 조회수는 자릿수 차이가 커도 체감
+// 인기 차이는 훨씬 완만해서 로그 스케일로 정규화하고, 그룹 내 최댓값 대비 비율로 최대
+// +3점까지만 가산 — 기존 채널/가수 취향 신호(최대 ±6~8점대)를 밀어내지 않는 보조 신호로만
+// 작동하게 가중치를 낮게 잡았다.
+function popularityScore(it, viewCounts, maxLogByDecade) {
+  const vc = viewCounts[it.id];
+  if (!vc) return 0;
+  const key = it.decade || '_unknown';
+  const m = maxLogByDecade[key];
+  if (!m) return 0;
+  return (Math.log10(vc + 1) / m) * 3;
+}
+function buildMaxLogByDecade(ranked, viewCounts) {
+  const maxLog = {};
+  for (const it of ranked) {
+    const vc = viewCounts[it.id];
+    if (!vc) continue;
+    const key = it.decade || '_unknown';
+    const lg = Math.log10(vc + 1);
+    if (!maxLog[key] || lg > maxLog[key]) maxLog[key] = lg;
+  }
+  return maxLog;
 }
 
 // Array.prototype.sort는 안정 정렬(V8 기준)이라, 기록이 전혀 없는(점수 0) 곡들끼리는 원래
@@ -900,6 +953,10 @@ app.on('window-all-closed', () => { if (forceQuit) app.quit(); });
 // ── IPC ──────────────────────────────────────────────────────────────────────
 
 ipcMain.handle('get-config', () => loadConfig());
+// https만 허용 — 렌더러가 임의로 file:// 등 다른 스킴을 열게 하는 걸 막기 위한 최소한의 가드
+ipcMain.handle('open-external', (_, url) => {
+  if (typeof url === 'string' && /^https:\/\//.test(url)) shell.openExternal(url);
+});
 ipcMain.handle('save-config', (_, cfg) => {
   const prev = loadConfig();
   // 렌더러는 앱 시작 시 한 번 읽은 config 사본을 계속 들고 있다가 매번 통째로 다시 보냄(재생위치
@@ -1031,6 +1088,21 @@ ipcMain.handle('get-recommendations', async (_, seedYtUrl, excludeItems, count) 
     let ranked = reorderByHistory(mix, history).filter(it => !exclude.has(it.id));
     ranked = dedupeSimilarSongs(ranked);
     ranked = ranked.filter(it => !alreadyQueued.some(ex => looksLikeSameSong(it, ex)));
+
+    // 조회수 인기도 가산점 — 사용자가 설정에서 유튜브 API 키를 넣어둔 경우에만 시도.
+    // 후보가 이미 20개 이하로 추려진 상태라 배치 1회 호출로 전부 조회 가능(50개까지 배치 지원).
+    const cfg = loadConfig();
+    if (cfg.ytApiKey && ranked.length) {
+      try {
+        const viewCounts = await fetchViewCounts(ranked.map(it => it.id), cfg.ytApiKey);
+        const maxLogByDecade = buildMaxLogByDecade(ranked, viewCounts);
+        ranked = ranked
+          .map(it => ({ it, score: scoreCandidate(it, history) + popularityScore(it, viewCounts, maxLogByDecade) }))
+          .sort((a, b) => b.score - a.score)
+          .map(x => x.it);
+      } catch { /* API 실패해도 조용히 기존 취향 순서 유지 — 추천 자체가 막히면 안 됨 */ }
+    }
+
     const need = count || 3;
     const { fresh, stale } = partitionOverused(ranked, findOverused(excludeItems));
     let picks = pickDiverseChannels(fresh, need);

@@ -9,8 +9,9 @@
 <style>
   :root {
     --bg: #fdf7fa; --bg2: #ffffff; --bg3: #fbeef4;
-    --accent: #DB2777; --border: #f0d9e3;
+    --accent: #DB2777; --accent-deep: #9D174D; --border: #f0d9e3;
     --text: #201319; --text2: #4a2f3a; --text3: #8a6478;
+    --green: #2e7d32; --amber: #b06f00;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { background: var(--bg); color: var(--text); font-family: 'Pretendard','Noto Sans KR','Segoe UI',sans-serif; letter-spacing: -0.01em; }
@@ -50,6 +51,19 @@
   .ver-dt { color: var(--text3); font-size: 14px; margin-left: auto; }
   .ver-entry ul { padding-left: 18px; font-size: 14px; line-height: 2; color: var(--text2); }
   .footer { text-align: center; color: var(--text3); font-size: 13px; margin-top: 40px; padding-bottom: 32px; }
+  .api-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 14px; padding: 28px; margin-bottom: 28px; }
+  .api-card h3 { font-size: 16px; font-weight: 700; margin-bottom: 16px; }
+  .privacy-box { background: #f1f8f1; border: 1px solid #c8e6c9; border-left: 3px solid var(--green); border-radius: 10px; padding: 14px 18px; margin-bottom: 20px; }
+  .privacy-box p { font-size: 13px; color: var(--text2); line-height: 1.6; }
+  .privacy-box strong { color: var(--green); }
+  .api-step { background: var(--bg3); border-radius: 10px; padding: 14px 18px; margin-bottom: 10px; }
+  .api-step:last-child { margin-bottom: 0; }
+  .api-step-num { font-size: 12px; color: var(--accent); font-weight: 700; margin-bottom: 4px; }
+  .api-step-title { font-size: 14px; font-weight: 700; margin-bottom: 4px; }
+  .api-step-desc { font-size: 13px; color: var(--text2); line-height: 1.6; }
+  .api-step-desc a { color: var(--accent-deep); text-decoration: none; }
+  .api-step-desc a:hover { text-decoration: underline; }
+  .api-step-desc code { background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 1px 6px; font-size: 12px; color: var(--text); font-family: monospace; }
 </style>
 </head>
 <body>
@@ -92,6 +106,50 @@
       <div class="feat-item"><strong>🖥 트레이 백그라운드</strong><span>창 닫아도 계속 재생</span></div>
       <div class="feat-item"><strong>📌 항상 위 고정</strong><span>다른 창 위에 표시</span></div>
       <div class="feat-item"><strong>🔄 자동 업데이트</strong><span>새 버전 자동 감지</span></div>
+    </div>
+  </div>
+  <div class="api-card" id="api-guide">
+    <h3>선택 — YouTube API 키 설정(조회수 가산점용)</h3>
+    <div class="privacy-box">
+      <p>🔒 <strong>이 키는 선택 입력입니다.</strong><br>
+      추천곡 중 조회수가 높은 곡에 가산점을 주는 기능에만 쓰이고, 키를 안 넣어도 K-Music의 다른 모든 기능은 그대로 작동합니다. 하루 무료 할당량이 1만 회라 개인 사용으로는 거의 소진될 일이 없습니다. 입력한 키는 내 컴퓨터에만 저장되고 외부로 전송되지 않습니다.</p>
+    </div>
+    <div class="api-step">
+      <div class="api-step-num">STEP 1</div>
+      <div class="api-step-title">Google Cloud Console 접속</div>
+      <div class="api-step-desc">
+        <a href="https://console.cloud.google.com" target="_blank">console.cloud.google.com</a>에 접속 후 Google 계정으로 로그인합니다.<br>
+        처음 접속하면 서비스 약관 동의 화면이 나옵니다. 국가를 선택하고 약관에 동의 후 계속하면 됩니다.
+      </div>
+    </div>
+    <div class="api-step">
+      <div class="api-step-num">STEP 2</div>
+      <div class="api-step-title">새 프로젝트 만들기</div>
+      <div class="api-step-desc">
+        상단 프로젝트 선택 → <strong>새 프로젝트</strong> 클릭. 이름은 자유롭게 지정하세요.<br>
+        이미 K-Tube 등 다른 K-앱용으로 만들어둔 프로젝트/키가 있다면 그대로 재사용해도 되지만, 할당량을 나눠 쓰게 되니 여유가 있다면 K-Music 전용 프로젝트를 새로 만드는 걸 권장합니다.
+      </div>
+    </div>
+    <div class="api-step">
+      <div class="api-step-num">STEP 3</div>
+      <div class="api-step-title">YouTube Data API v3 사용 설정</div>
+      <div class="api-step-desc">
+        왼쪽 메뉴 → <strong>API 및 서비스 → 라이브러리</strong> → <code>YouTube Data API v3</code> 검색 → 사용 설정.
+      </div>
+    </div>
+    <div class="api-step">
+      <div class="api-step-num">STEP 4</div>
+      <div class="api-step-title">API 키 발급</div>
+      <div class="api-step-desc">
+        <strong>API 및 서비스 → 사용자 인증 정보 → 사용자 인증 정보 만들기 → API 키</strong> 클릭 후, 생성된 키를 복사해두세요.
+      </div>
+    </div>
+    <div class="api-step">
+      <div class="api-step-num">STEP 5</div>
+      <div class="api-step-title">K-Music에 키 입력</div>
+      <div class="api-step-desc">
+        앱 실행 후 <strong>설정 → 내 계정 → 유튜브 API 키</strong> 칸에 붙여넣으면 완료됩니다.
+      </div>
     </div>
   </div>
   <details class="history-wrap">

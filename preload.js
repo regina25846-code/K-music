@@ -3,6 +3,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('api', {
   getConfig: () => ipcRenderer.invoke('get-config'),
   saveConfig: (cfg) => ipcRenderer.invoke('save-config', cfg),
+  openExternal: (url) => ipcRenderer.invoke('open-external', url),
   getPlaylists: () => ipcRenderer.invoke('get-playlists'),
   savePlaylists: (pl) => ipcRenderer.invoke('save-playlists', pl),
   getStream: (ytUrl, quality) => ipcRenderer.invoke('get-stream', ytUrl, quality),

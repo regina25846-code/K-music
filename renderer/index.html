@@ -762,6 +762,13 @@ body.lyrics-mode .lyr-preview { display: flex; }
   padding: 8px 12px; font-size: 12px; color: var(--text); outline: none; cursor: pointer;
   min-width: 100px; font-family: inherit;
 }
+.srow-ctrl input[type="password"], .srow-ctrl input[type="text"] {
+  background: linear-gradient(180deg, var(--surf-hi), var(--surf-lo)); border: none; border-radius: 6px;
+  box-shadow: inset 0 1px 0 var(--sheen-hi), inset 0 -1px 2px var(--sheen-lo), 0 1px 2px rgba(0,0,0,0.15);
+  padding: 8px 12px; font-size: 12px; color: var(--text); outline: none;
+  width: 180px; font-family: var(--mono);
+}
+.srow-ctrl input[type="password"]::placeholder, .srow-ctrl input[type="text"]::placeholder { color: var(--text3); }
 /* dropdown option popups are OS-rendered on Windows and ignore gradient backgrounds —
    force a solid, explicitly-contrasted color pair so option text stays readable */
 select option { background: var(--card); color: var(--text); }
@@ -1125,7 +1132,10 @@ select option { background: var(--card); color: var(--text); }
 /* ---- settings select: engraved paper field with brass edge (not a brass button) ---- */
 [data-theme="ambient"] .srow-ctrl select, [data-theme="midnight"] .srow-ctrl select,
 [data-theme="vgraphite"] .srow-ctrl select,
-[data-theme="vpaper"] .srow-ctrl select
+[data-theme="vpaper"] .srow-ctrl select,
+[data-theme="ambient"] .srow-ctrl input, [data-theme="midnight"] .srow-ctrl input,
+[data-theme="vgraphite"] .srow-ctrl input,
+[data-theme="vpaper"] .srow-ctrl input
 {
   background: var(--bg); border: 1px solid var(--surf-lo); border-radius: 7px;
   padding: 6px 10px; color: var(--text); font-family: var(--sans);
@@ -1385,6 +1395,13 @@ select option { background: var(--card); color: var(--text); }
           <div class="srow-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m5.5 5.5 13 13"/></svg></div>
           <div class="srow-text"><div class="srow-label">추천 제외한 채널</div><div class="srow-sub" id="blocked-ch-sub">0개</div></div>
           <button class="srow-btn" id="btn-blocked-channels" type="button">관리</button>
+        </div>
+        <div class="settings-row">
+          <div class="srow-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg></div>
+          <div class="srow-text"><div class="srow-label">유튜브 API 키</div><div class="srow-sub">추천 조회수 가산점 · 선택 입력, 본인 키만 사용 · <a href="#" id="yt-api-key-guide" style="color:var(--prog);">발급 및 설정방법</a></div></div>
+          <div class="srow-ctrl">
+            <input type="password" id="cfg-yt-api-key" placeholder="미입력 시 조회수 가산점 없음" autocomplete="off"/>
+          </div>
         </div>
       </div>
       <div>

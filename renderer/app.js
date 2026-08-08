@@ -395,6 +395,7 @@ async function openSettings() {
   $('cfg-auto').checked = !!config.autoplay;
   $('cfg-resume').checked = !!config.resume;
   $('auto-sub').textContent = config.autoplay ? '켜짐' : '꺼짐';
+  $('cfg-yt-api-key').value = config.ytApiKey || '';
   $('cfg-startup').checked = await window.api.getLoginItem();
   $('settings-ov').classList.add('show');
 }
@@ -403,6 +404,10 @@ $('nav-settings').onclick = openSettings;
 $('settings-close').onclick = closeSettings;
 $('settings-ov').addEventListener('click', e => { if(e.target===$('settings-ov')) closeSettings(); });
 $('cfg-auto').onchange = function() { $('auto-sub').textContent = this.checked ? '켜짐' : '꺼짐'; };
+$('yt-api-key-guide').onclick = (e) => {
+  e.preventDefault();
+  window.api.openExternal('https://regina25846-code.github.io/K-music/#api-guide');
+};
 $('settings-save').onclick = async () => {
   const theme = $('cfg-theme').value;
   await saveCfg({
@@ -410,7 +415,8 @@ $('settings-save').onclick = async () => {
     theme,
     autoplay: $('cfg-auto').checked,
     resume: $('cfg-resume').checked,
-    alwaysOnTop: config.alwaysOnTop
+    alwaysOnTop: config.alwaysOnTop,
+    ytApiKey: $('cfg-yt-api-key').value.trim()
   });
   applyTheme(theme);
   updateQualityBadge();
