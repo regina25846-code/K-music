@@ -131,9 +131,17 @@ async function maybeExtendQueue(plIdx) {
       .filter(x => x.id);
     const recs = await window.api.getRecommendations(`https://www.youtube.com/watch?v=${seedId}`, excludeItems, need);
     if (!recs.length) return;
-    // await 도중 사용자가 다른 곡/목록으로 옮겨갔을 수 있으니 재확인 후 반영
-    if (playingPl !== plIdx || playlists[plIdx]?.tracks !== tracks) return;
-    recs.forEach(r => tracks.push({ ytUrl: r.ytUrl, title: r.title, channel: r.channel, thumbnail: r.thumbnail, duration: r.duration, releaseYear: r.releaseYear, source: 'auto' }));
+    // await 도중 사용자가 다른 곡/목록으로 옮겨갔을 수 있으니 재확인 후 반영 — 예전엔 tracks
+    // 배열 자체의 참조 동일성(!==)으로 비교했는데, pruneOldAutoTracks가 오래된 추천곡을
+    // 정리할 때마다 filter로 배열을 새로 만들어서 참조가 매번 바뀐다. 큐가 정리 임계치(과거
+    // 10곡+미래 3곡=13곡)에 도달해서 이 정리가 곡 넘어갈 때마다 같이 일어나기 시작하면, 매번
+    // 이 체크에 걸려 방금 받아온 추천이 통째로 버려지고 있었다 — "13곡 정도 되면 추가 생성이
+    // 안 된다"는 형 리포트의 원인(2026-08-08). 배열 참조 대신 "지금 재생 중인 곡이 여전히
+    // 이 요청을 보낼 때의 시드곡과 같은가"로 판단하면 정리로 배열이 바뀌어도 안전하다.
+    const curTracks = playlists[plIdx]?.tracks;
+    if (playingPl !== plIdx || !curTracks) return;
+    if (videoIdFromUrl(curTracks[currentTrack]?.ytUrl) !== seedId) return;
+    recs.forEach(r => curTracks.push({ ytUrl: r.ytUrl, title: r.title, channel: r.channel, thumbnail: r.thumbnail, duration: r.duration, releaseYear: r.releaseYear, source: 'auto' }));
     await save();
     if (curView === 'home' && currentPl === plIdx) renderTrackList();
   } catch {
