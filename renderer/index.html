@@ -686,7 +686,20 @@ body.lyrics-mode .lyr-preview { display: flex; }
    모달이라, .modal-ov 기본값(200)보다 낮으면 설정 패널 뒤에 완전히 가려진다(2026-08-07 Playwright로
    실제 발견 — 기존 #modal은 지금까지 설정 패널 밖에서만 열려서 이 충돌이 드러난 적이 없었음.
    "이름 변경" 버튼이 기존 #modal(openModal())을 그대로 재사용하면서 처음 겹치게 됨). */
-#pw-modal, #modal { z-index: 350; }
+#pw-modal, #modal, #blocked-ch-modal { z-index: 350; }
+.blocked-ch-list { max-height: 260px; overflow-y: auto; margin-bottom: 16px; }
+.blocked-ch-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 9px 0; border-bottom: 1px solid var(--border);
+}
+.blocked-ch-row:last-child { border-bottom: none; }
+.blocked-ch-name { font-size: 13px; color: var(--text); overflow-wrap: break-word; word-break: break-word; }
+.blocked-ch-unblock {
+  flex-shrink: 0; background: transparent; border: 1px solid var(--border); color: var(--text2);
+  border-radius: 6px; padding: 5px 11px; font-size: 12px; cursor: pointer; font-family: inherit;
+}
+.blocked-ch-unblock:hover { color: var(--text); border-color: var(--text3); }
+.blocked-ch-empty { font-size: 13px; color: var(--text3); text-align: center; padding: 24px 0; }
 #pw-modal .modal-card input { margin-bottom: 14px; letter-spacing: 0.3em; }
 #pw-error { font-size: 11.5px; color: #E0483A; min-height: 17px; margin: -4px 0 14px; line-height: 1.5; }
 .pw-forgot {
@@ -1368,6 +1381,11 @@ select option { background: var(--card); color: var(--text); }
             <div class="tog-thumb"></div>
           </label>
         </div>
+        <div class="settings-row">
+          <div class="srow-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m5.5 5.5 13 13"/></svg></div>
+          <div class="srow-text"><div class="srow-label">추천 제외한 채널</div><div class="srow-sub" id="blocked-ch-sub">0개</div></div>
+          <button class="srow-btn" id="btn-blocked-channels" type="button">관리</button>
+        </div>
       </div>
       <div>
         <div class="set-group-lab">오디오</div>
@@ -1467,6 +1485,16 @@ select option { background: var(--card); color: var(--text); }
   </div>
 </div>
 
+<div class="modal-ov" id="blocked-ch-modal">
+  <div class="modal-card" style="width:360px">
+    <h3>추천 제외한 채널</h3>
+    <div class="blocked-ch-list" id="blocked-ch-list"></div>
+    <div class="modal-btns">
+      <button class="m-ok" id="blocked-ch-close" type="button" style="width:100%">닫기</button>
+    </div>
+  </div>
+</div>
+
 <div class="loading-ov" id="loading"><div class="spinner"></div><span id="loading-text">로딩 중...</span></div>
 
 <div class="settings-overlay" id="about-ov">
@@ -1480,7 +1508,7 @@ select option { background: var(--card); color: var(--text); }
       <div style="font-size:18px;font-weight:800;margin-bottom:4px;color:var(--text)">K-Music</div>
       <div style="font-size:12px;color:var(--text3);margin-bottom:18px" id="about-version">버전 확인 중...</div>
       <div style="height:1px;background:var(--border);margin-bottom:16px"></div>
-      <div style="font-size:13px;color:var(--text2);line-height:1.8;margin-bottom:16px">광고 없는 유튜브 음악 플레이어<br>재생목록 저장 · 백그라운드 재생 지원</div>
+      <div style="font-size:13px;color:var(--text2);line-height:1.8;margin-bottom:16px">광고 없는 유튜브 음악 플레이어<br>내 취향 학습 추천 재생 · 백그라운드 재생 지원</div>
       <div style="font-size:11px;color:var(--text3);margin-bottom:16px">© 2026 KrisB. All rights reserved.</div>
       <div class="about-actions">
         <button class="about-update-btn" id="about-check-update">업데이트 확인</button>

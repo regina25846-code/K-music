@@ -426,7 +426,11 @@ function titleTokens(title) {
     .filter(w => w.length >= 2 && !TITLE_NOISE_WORDS.has(w));
 }
 function looksLikeSameSong(a, b) {
-  if (Math.abs((a.duration || 0) - (b.duration || 0)) > 1) return false;
+  // ±1초는 너무 타이트했다(형 실사용 중 발견, 2026-08-08 — 같은 채널이 올린 페인킬러가
+  // 6:09/6:06으로 3초 차이만 나는데도 못 잡음, 인트로 편집·리마스터 등으로 같은 곡도 흔히
+  // 몇 초씩 차이 남). ±4초로 완화하되, 제목에 겹치는 단어가 있어야 한다는 조건은 그대로라
+  // 우연히 길이만 비슷한 서로 다른 곡을 오판할 위험은 여전히 낮다.
+  if (Math.abs((a.duration || 0) - (b.duration || 0)) > 4) return false;
   const ta = titleTokens(a.title);
   const tb = new Set(titleTokens(b.title));
   return ta.some(w => tb.has(w));

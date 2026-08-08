@@ -307,11 +307,53 @@ $('cfg-personalize').onchange = async function () {
   $('personalize-sub').textContent = this.checked ? '재생 기록으로 믹스 추천 재정렬' : '꺼짐 · 유튜브 원래 순서 그대로';
 };
 
+// 추천에서 제외한 채널 관리(2026-08-08 추가) — 우클릭 메뉴로 차단은 되는데 해제할 방법이
+// 없었음(차단된 채널은 애초에 추천에 안 뜨니 다시 우클릭할 기회가 없음, 형 지적). 설정에서
+// 목록을 보고 개별 해제할 수 있게 함.
+function updateBlockedChSub() {
+  $('blocked-ch-sub').textContent = `${blockedChannels.size}개`;
+}
+function renderBlockedChList() {
+  const list = $('blocked-ch-list');
+  const channels = [...blockedChannels].sort();
+  if (!channels.length) {
+    list.innerHTML = '<div class="blocked-ch-empty">추천에서 제외한 채널이 없어요</div>';
+    return;
+  }
+  list.innerHTML = channels.map(ch => `
+    <div class="blocked-ch-row" data-channel="${ch.replace(/"/g, '&quot;')}">
+      <span class="blocked-ch-name">${ch.replace(/</g, '&lt;')}</span>
+      <button class="blocked-ch-unblock" type="button">제외 해제</button>
+    </div>
+  `).join('');
+  list.querySelectorAll('.blocked-ch-row').forEach(row => {
+    row.querySelector('.blocked-ch-unblock').onclick = async () => {
+      const ch = row.dataset.channel;
+      const nowBlocked = await window.api.toggleChannelBlock(ch);
+      if (!nowBlocked) {
+        blockedChannels.delete(ch);
+        updateBlockedChSub();
+        renderBlockedChList();
+        toast(`"${ch}" 채널 추천 제외를 해제했어요`);
+      }
+    };
+  });
+}
+$('btn-blocked-channels').onclick = () => {
+  renderBlockedChList();
+  $('blocked-ch-modal').classList.add('show');
+};
+$('blocked-ch-close').onclick = () => $('blocked-ch-modal').classList.remove('show');
+
 // ── stream cache ──────────────────────────────────────────────────────────────
-async function getStream(ytUrl) {
+// force=true면 캐시된 스트림 URL을 무시하고 무조건 yt-dlp를 다시 호출해서 새 URL을 받아온다
+// — "no supported source" 재생 실패 시 재시도용(2026-08-08, 예전에 문서에만 남고 실제 코드
+// 반영이 안 돼있던 걸 재발견해서 이번에 실제로 구현). 캐시된 URL이 재생 시점엔 이미 만료됐거나
+// 뭔가 문제가 있었을 가능성을 겨냥한 방어책이라, 그 URL을 재사용하는 캐시 히트를 건너뛴다.
+async function getStream(ytUrl, force = false) {
   const now = Date.now();
   const c = streamCache[ytUrl];
-  if (c && c.expireTs > now + 60000) return c.url;
+  if (!force && c && c.expireTs > now + 60000) return c.url;
   const res = await window.api.getStream(ytUrl, config.quality || '192');
   if (res.error) throw new Error(res.error);
   streamCache[ytUrl] = { url: res.streamUrl, expireTs: now + 5.5*3600*1000 };
@@ -642,12 +684,23 @@ async function playTrack(idx, plIdx = currentPl, resumeSec = 0) {
   tTot.textContent = fmt(t.duration);
   renderTrackList();
   showLoad('스트리밍 로딩 중...');
-  try {
-    const url = await getStream(t.ytUrl);
+  // "재생 실패: no supported source" 대응 — 캐시된 스트림 URL이 재생 시점엔 이미 만료됐거나
+  // 문제가 생겼을 가능성을 겨냥해서, 첫 시도가 실패하면 캐시를 건너뛰고 완전히 새로 스트림
+  // URL을 받아와 한 번만 더 시도한다. 이것도 실패해야 토스트를 띄운다(2026-08-08 — 예전에
+  // 문서에만 계획으로 남고 실제 코드 반영이 안 돼있던 걸 재발견해서 이번에 실제로 구현).
+  const attemptLoad = async (force) => {
+    const url = await getStream(t.ytUrl, force);
     audio.src = url;
     audio.volume = volSlider.value/100;
     if (resumeSec > 0) audio.currentTime = resumeSec;
     await audio.play();
+  };
+  try {
+    try {
+      await attemptLoad(false);
+    } catch {
+      await attemptLoad(true);
+    }
     isPlaying=true; setPlayIcon(true);
     await saveCfg({lastPlId: playlists[plIdx].id, lastTrackIdx: idx, lastPos: resumeSec});
     if (inLyrics) ensureLyricsLoaded();
@@ -1085,6 +1138,7 @@ $('ctx-block-channel').onclick = async (e) => {
   if (!channel) return;
   const nowBlocked = await window.api.toggleChannelBlock(channel);
   if (nowBlocked) blockedChannels.add(channel); else blockedChannels.delete(channel);
+  updateBlockedChSub();
   toast(nowBlocked ? `"${channel}" 채널을 추천에서 제외했어요` : `"${channel}" 채널 추천 제외를 해제했어요`);
 };
 
@@ -1205,6 +1259,7 @@ $('btn-pin').onclick = async function() {
   } else {
     updateAccountUi();
     blockedChannels = new Set(await window.api.getBlockedChannels());
+    updateBlockedChSub();
   }
 
   config = await window.api.getConfig();
