@@ -426,14 +426,21 @@ function titleTokens(title) {
     .filter(w => w.length >= 2 && !TITLE_NOISE_WORDS.has(w));
 }
 function looksLikeSameSong(a, b) {
-  // ±1초는 너무 타이트했다(형 실사용 중 발견, 2026-08-08 — 같은 채널이 올린 페인킬러가
-  // 6:09/6:06으로 3초 차이만 나는데도 못 잡음, 인트로 편집·리마스터 등으로 같은 곡도 흔히
-  // 몇 초씩 차이 남). ±4초로 완화하되, 제목에 겹치는 단어가 있어야 한다는 조건은 그대로라
-  // 우연히 길이만 비슷한 서로 다른 곡을 오판할 위험은 여전히 낮다.
-  if (Math.abs((a.duration || 0) - (b.duration || 0)) > 4) return false;
+  const durDiff = Math.abs((a.duration || 0) - (b.duration || 0));
   const ta = titleTokens(a.title);
-  const tb = new Set(titleTokens(b.title));
-  return ta.some(w => tb.has(w));
+  const tbArr = titleTokens(b.title);
+  const tb = new Set(tbArr);
+  const shared = ta.filter(w => tb.has(w)).length;
+  if (!shared) return false; // 겹치는 단어 자체가 없으면 무조건 다른 곡
+
+  // 단어 하나만 겹치는 느슨한 경우엔 길이도 거의 같아야 한다(±4초 — 페인킬러 6:09/6:06
+  // 실사례로 완화, 2026-08-08). 반면 "(2015 Remaster)"류는 리마스터판이 원곡보다 몇~십 초씩
+  // 더 긴 경우가 흔해서(형 실사용 중 재발견: "2 Minutes to Midnight" 6:10/6:04, 6초 차이로
+  // ±4초도 못 잡음), 제목 단어가 대부분(과반) 겹치는 강한 매치일 땐 길이 기준을 ±15초까지
+  // 넓게 봐준다 — 제목 유사도가 이미 충분히 강한 증거라 오판 위험은 낮다.
+  const overlapRatio = shared / Math.min(ta.length, tbArr.length);
+  const durLimit = overlapRatio >= 0.6 ? 15 : 4;
+  return durDiff <= durLimit;
 }
 function dedupeSimilarSongs(items) {
   const kept = [];
@@ -449,6 +456,35 @@ function dedupeSimilarSongs(items) {
 // 일어나는데, 그때마다 같은 노래의 다른 업로드가 반복 추천되는 걸 막기 위함(2026-08-08).
 function excludesAsSongList(excludeItems) {
   return (excludeItems || []).filter(x => x && x.title);
+}
+
+// "최근 자동추천 10곡" 창(=pruneOldAutoTracks가 유지하는 범위, 렌더러가 넘겨준 전체 재생목록
+// 중 source==='auto'인 것들) 안에서 같은 채널/가수가 OVERUSE_CAP개 이상이면 "질렸다"고 보고
+// 새 추천에서 뒤로 민다(형 요청, 2026-08-08 — 아이언 메이든이 계속 나와서 지겹다는 실사용
+// 피드백). 완전히 막는 게 아니라 순서만 뒤로 미는 이유는, 다른 후보가 아예 없을 때도 need만큼
+// 채워야 해서다(pickDiverseChannels와 같은 fallback 원칙).
+const OVERUSE_CAP = 3;
+function findOverused(excludeItems) {
+  const recentAuto = (excludeItems || []).filter(x => x && x.source === 'auto');
+  const channelCounts = {};
+  const artistCounts = {};
+  for (const x of recentAuto) {
+    if (x.channel) channelCounts[x.channel] = (channelCounts[x.channel] || 0) + 1;
+    const artist = parseArtistTitle(x.title || '', x.channel || '').artist;
+    if (artist) artistCounts[artist] = (artistCounts[artist] || 0) + 1;
+  }
+  return {
+    channels: new Set(Object.keys(channelCounts).filter(c => channelCounts[c] >= OVERUSE_CAP)),
+    artists: new Set(Object.keys(artistCounts).filter(a => artistCounts[a] >= OVERUSE_CAP))
+  };
+}
+function deprioritizeOverused(ranked, overused) {
+  const fresh = [], stale = [];
+  for (const it of ranked) {
+    const over = (it.channel && overused.channels.has(it.channel)) || (it.artist && overused.artists.has(it.artist));
+    (over ? stale : fresh).push(it);
+  }
+  return [...fresh, ...stale]; // 안 질린 후보를 앞으로, 질린 후보는 다른 게 없을 때만 fallback으로 뒤에 남김
 }
 
 // 추천 후보를 앞에서부터 "채널+가수 둘 다 처음 보는" 것만 먼저 뽑고, need만큼 안 모이면
@@ -994,6 +1030,7 @@ ipcMain.handle('get-recommendations', async (_, seedYtUrl, excludeItems, count) 
     let ranked = reorderByHistory(mix, history).filter(it => !exclude.has(it.id));
     ranked = dedupeSimilarSongs(ranked);
     ranked = ranked.filter(it => !alreadyQueued.some(ex => looksLikeSameSong(it, ex)));
+    ranked = deprioritizeOverused(ranked, findOverused(excludeItems));
     return pickDiverseChannels(ranked, count || 3);
   } catch {
     return []; // 네트워크 실패 등은 조용히 빈 목록 — 추천 실패로 재생 자체가 막히면 안 됨

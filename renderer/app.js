@@ -123,10 +123,11 @@ async function maybeExtendQueue(plIdx) {
 
   extendingQueue = true;
   try {
-    // id뿐 아니라 title/duration도 같이 보낸다 — 같은 노래의 다른 업로드(다른 id)까지
-    // 걸러내려면 메인 프로세스 쪽에서 제목/길이 비교가 필요하다(2026-08-08).
+    // id뿐 아니라 title/duration/channel/source도 같이 보낸다 — title/duration은 같은 노래의
+    // 다른 업로드(다른 id) 중복을 걸러내는 데, channel/source는 "최근 자동추천에 같은 가수/채널이
+    // 너무 많이 몰렸으면 새 추천에서 순위를 낮추는" 판단에 메인 프로세스 쪽에서 쓰인다(2026-08-08).
     const excludeItems = tracks
-      .map(t => ({ id: videoIdFromUrl(t.ytUrl), title: t.title, duration: t.duration }))
+      .map(t => ({ id: videoIdFromUrl(t.ytUrl), title: t.title, duration: t.duration, channel: t.channel, source: t.source || 'manual' }))
       .filter(x => x.id);
     const recs = await window.api.getRecommendations(`https://www.youtube.com/watch?v=${seedId}`, excludeItems, need);
     if (!recs.length) return;
