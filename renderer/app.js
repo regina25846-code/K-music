@@ -16,6 +16,7 @@ let shuffle = false;
 let config = {};
 let streamCache = {};  // ytUrl -> { url, expireTs }
 let currentAccount = null; // 2026-08-07 계정(로그인) 기능 추가 — { id, name, prefs, ... }, pinHash는 메인 프로세스가 절대 안 보내줌
+let blockedChannels = new Set(); // 2026-08-08 추가 — 추천에서 제외한 채널(우클릭 메뉴로 토글), 계정 로드 시 채움
 
 let inLyrics = false;
 let lyricsState = null;   // { found, synced(parsed lines[] or null), plain, artist, title, ytUrl }
@@ -122,8 +123,12 @@ async function maybeExtendQueue(plIdx) {
 
   extendingQueue = true;
   try {
-    const excludeIds = tracks.map(t => videoIdFromUrl(t.ytUrl)).filter(Boolean);
-    const recs = await window.api.getRecommendations(`https://www.youtube.com/watch?v=${seedId}`, excludeIds, need);
+    // id뿐 아니라 title/duration도 같이 보낸다 — 같은 노래의 다른 업로드(다른 id)까지
+    // 걸러내려면 메인 프로세스 쪽에서 제목/길이 비교가 필요하다(2026-08-08).
+    const excludeItems = tracks
+      .map(t => ({ id: videoIdFromUrl(t.ytUrl), title: t.title, duration: t.duration }))
+      .filter(x => x.id);
+    const recs = await window.api.getRecommendations(`https://www.youtube.com/watch?v=${seedId}`, excludeItems, need);
     if (!recs.length) return;
     // await 도중 사용자가 다른 곡/목록으로 옮겨갔을 수 있으니 재확인 후 반영
     if (playingPl !== plIdx || playlists[plIdx]?.tracks !== tracks) return;
@@ -1034,6 +1039,10 @@ function showCtxMenu(e, idx) {
   _ctxIdx = idx;
   showCtxMain();
   $('ctx-move').style.display = playlists.length > 1 ? '' : 'none';
+  const ctxChannel = playlists[currentPl]?.tracks[idx]?.channel || '';
+  $('ctx-block-channel').style.display = ctxChannel ? '' : 'none';
+  $('ctx-block-channel-label').textContent = blockedChannels.has(ctxChannel)
+    ? '이 채널 추천 제외 해제' : '이 채널 추천에서 제외';
   ctxMenu.classList.add('show'); // 실제 크기를 재려면 먼저 보이는 상태여야 함 — 같은 틱 안에서 위치까지 잡으니 깜빡임 없음
 
   const menuW = ctxMenu.offsetWidth;
@@ -1065,6 +1074,18 @@ $('ctx-copy-link').onclick = async (e) => {
   if (!track?.ytUrl) return;
   await window.api.copyText(track.ytUrl);
   toast('링크를 복사했습니다');
+};
+// 형이 의도치 않은 채널이 추천에 계속 끼어들 때 직접 끊는 스위치(2026-08-08 추가) — 채널을
+// 차단하면 scoreCandidate가 -Infinity 처리해서 그 채널은 앞으로 추천 후보에서 아예 빠진다.
+$('ctx-block-channel').onclick = async (e) => {
+  e.stopPropagation();
+  hideCtx();
+  const track = playlists[currentPl]?.tracks[_ctxIdx];
+  const channel = track?.channel;
+  if (!channel) return;
+  const nowBlocked = await window.api.toggleChannelBlock(channel);
+  if (nowBlocked) blockedChannels.add(channel); else blockedChannels.delete(channel);
+  toast(nowBlocked ? `"${channel}" 채널을 추천에서 제외했어요` : `"${channel}" 채널 추천 제외를 해제했어요`);
 };
 
 function moveTrackToPlaylist(idx, targetPlIdx) {
@@ -1183,6 +1204,7 @@ $('btn-pin').onclick = async function() {
     $('login-name-input').focus();
   } else {
     updateAccountUi();
+    blockedChannels = new Set(await window.api.getBlockedChannels());
   }
 
   config = await window.api.getConfig();

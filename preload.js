@@ -44,6 +44,8 @@ contextBridge.exposeInMainWorld('api', {
   changeAccountName: (newName) => ipcRenderer.invoke('account-change-name', newName),
   changeAccountPin: (currentPin, newPin, resetMode) => ipcRenderer.invoke('account-change-pin', currentPin, newPin, resetMode),
   setPersonalize: (on) => ipcRenderer.invoke('account-set-personalize', on),
+  toggleChannelBlock: (channel) => ipcRenderer.invoke('toggle-channel-block', channel),
+  getBlockedChannels: () => ipcRenderer.invoke('get-blocked-channels'),
   // 추천(2026-08-07 추가)
   getRecommendations: (seedYtUrl, excludeIds, count) => ipcRenderer.invoke('get-recommendations', seedYtUrl, excludeIds, count),
   recordPlayEvent: (ytUrl, meta, eventType) => ipcRenderer.invoke('record-play-event', ytUrl, meta, eventType)

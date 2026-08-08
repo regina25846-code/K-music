@@ -358,6 +358,7 @@ function scoreCandidate(item, history) {
   let score = 0;
 
   const ch = item.channel && history.channels[item.channel];
+  if (ch?.blocked) return -Infinity;
   if (ch) {
     score += (ch.playCount || 0) * 1.5;
     score -= (ch.skipCount || 0) * 1.5;
@@ -436,6 +437,41 @@ function dedupeSimilarSongs(items) {
     if (!kept.some(k => looksLikeSameSong(k, it))) kept.push(it);
   }
   return kept;
+}
+
+// 한 번의 추천 호출(같은 시드) 안에서만 겹치는지 보는 dedupeSimilarSongs와 달리, 이미
+// 재생목록에 올라와 있는 곡(과거에 지나간 것 포함, 영상 ID는 서로 다를 수 있음)까지 넓혀서
+// "이미 나온 노래"인지 본다 — 형이 큐를 여러 번 넘기면서 확인할 때마다 매번 새로 추천 호출이
+// 일어나는데, 그때마다 같은 노래의 다른 업로드가 반복 추천되는 걸 막기 위함(2026-08-08).
+function excludesAsSongList(excludeItems) {
+  return (excludeItems || []).filter(x => x && x.title);
+}
+
+// 추천 후보를 앞에서부터 "채널+가수 둘 다 처음 보는" 것만 먼저 뽑고, need만큼 안 모이면
+// 그때만 겹치는 것도 허용한다(형 실사용 중 발견, 2026-08-08 — 처음엔 아이유 전용 채널이
+// 도배됐고, 채널만 기준으로 막았더니 이번엔 "1theK"처럼 여러 가수를 모아 올리는 공용 채널
+// 안에서 멜로망스 한 가수 노래만 도배됨). 채널만으론 공용 채널 안의 가수 쏠림을 못 막아서
+// 가수(parseArtistTitle로 뽑은 값)도 같은 기준으로 같이 본다. 완전한 다양성 보장은 아니고,
+// 한 번의 추천 호출에서 같은 채널/가수가 뭉텅이로 쏟아지는 것만 막는 실용적 수준의 개선이다.
+function pickDiverseChannels(ranked, need) {
+  const picked = [];
+  const usedChannels = new Set();
+  const usedArtists = new Set();
+  const leftover = [];
+  for (const it of ranked) {
+    if (picked.length >= need) break;
+    const ch = it.channel || '';
+    const ar = it.artist || '';
+    if ((ch && usedChannels.has(ch)) || (ar && usedArtists.has(ar))) { leftover.push(it); continue; }
+    picked.push(it);
+    if (ch) usedChannels.add(ch);
+    if (ar) usedArtists.add(ar);
+  }
+  for (const it of leftover) {
+    if (picked.length >= need) break;
+    picked.push(it);
+  }
+  return picked;
 }
 
 let mainWin = null;
@@ -913,8 +949,33 @@ ipcMain.handle('account-set-personalize', (_, on) => {
   return true;
 });
 
+// 특정 채널을 추천에서 완전히 제외한다(-Infinity 처리는 scoreCandidate에 있음) — 형이
+// 의도하지 않았는데 알고리즘이 계속 같은 채널만 재생시켜서 그 재생기록이 다시 취향 점수로
+// 쌓이는 눈덩이 현상을 형이 직접 끊을 수 있게 하는 수동 제어 장치(형 요청, 2026-08-08).
+ipcMain.handle('toggle-channel-block', (_, channel) => {
+  channel = String(channel || '').trim();
+  const account = getActiveAccount();
+  if (!account || !channel) return null;
+  const history = loadHistory(account.id);
+  history.channels[channel] ||= { playCount: 0, skipCount: 0, favoriteCount: 0 };
+  const next = !history.channels[channel].blocked;
+  history.channels[channel].blocked = next;
+  saveHistory(history);
+  return next;
+});
+
+ipcMain.handle('get-blocked-channels', () => {
+  const account = getActiveAccount();
+  if (!account) return [];
+  const history = loadHistory(account.id);
+  return Object.keys(history.channels || {}).filter(ch => history.channels[ch]?.blocked);
+});
+
 // ── 추천 IPC ───────────────────────────────────────────────────────────────────
-ipcMain.handle('get-recommendations', async (_, seedYtUrl, excludeIds, count) => {
+// excludeItems: [{ id, title, duration }] — 재생목록에 이미 올라와 있는 곡들(과거+현재+미래 전부).
+// 예전엔 id 배열만 받았는데, 같은 노래의 다른 업로드(다른 id)까지 걸러내려면 제목/길이가
+// 필요해서 객체 배열로 바꿨다(2026-08-08).
+ipcMain.handle('get-recommendations', async (_, seedYtUrl, excludeItems, count) => {
   const account = getActiveAccount();
   if (!account) return [];
   const seedId = extractVideoId(seedYtUrl);
@@ -924,9 +985,12 @@ ipcMain.handle('get-recommendations', async (_, seedYtUrl, excludeIds, count) =>
       .filter(it => !MIX_EXCLUDE_RE.test(it.title))
       .map(enrichItem);
     const history = loadHistory(account.id);
-    const exclude = new Set(excludeIds || []);
-    const ranked = dedupeSimilarSongs(reorderByHistory(mix, history).filter(it => !exclude.has(it.id)));
-    return ranked.slice(0, count || 3);
+    const exclude = new Set((excludeItems || []).map(x => x?.id).filter(Boolean));
+    const alreadyQueued = excludesAsSongList(excludeItems);
+    let ranked = reorderByHistory(mix, history).filter(it => !exclude.has(it.id));
+    ranked = dedupeSimilarSongs(ranked);
+    ranked = ranked.filter(it => !alreadyQueued.some(ex => looksLikeSameSong(it, ex)));
+    return pickDiverseChannels(ranked, count || 3);
   } catch {
     return []; // 네트워크 실패 등은 조용히 빈 목록 — 추천 실패로 재생 자체가 막히면 안 됨
   }
