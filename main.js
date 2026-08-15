@@ -249,6 +249,12 @@ function ytdlp(args) {
 }
 
 // Get audio stream URL + metadata for a YouTube URL
+// "재생 실패: no supported source" 근본 원인 조사(2026-08-16, 형 신고) — 라이브방송/프리미어성
+// 영상은 yt-dlp가 info.url에 HLS(m3u8) 매니페스트 주소를 돌려주는데, 이건 <audio> 태그가
+// 네이티브로 재생 못 하는 형식이라 브라우저가 곧바로 "no supported source"를 던진다. 기존
+// 재시도(force refetch)는 같은 영상을 다시 받아도 여전히 같은 HLS 주소라 무의미했음 — 이걸
+// 미리 감지해서 명확한 에러로 구분해준다(추천곡이 쌓일수록 라이브/프리미어 영상이 섞일 확률이
+// 올라가는 것과 패턴이 일치).
 async function getStreamInfo(ytUrl, quality = '192') {
   const formatStr = quality === '320' ? 'bestaudio[abr>=256]/bestaudio'
     : quality === '128' ? 'bestaudio[abr<=128]/worstaudio'
@@ -262,6 +268,11 @@ async function getStreamInfo(ytUrl, quality = '192') {
     ytUrl
   ]);
   const info = JSON.parse(json);
+  if (info.is_live || info.live_status === 'is_live' || (info.protocol || '').includes('m3u8')) {
+    const err = new Error('라이브방송/프리미어 영상이라 재생할 수 없어요');
+    err.code = 'UNSUPPORTED_LIVE_SOURCE';
+    throw err;
+  }
   return {
     streamUrl: info.url,
     title: info.title,
@@ -1189,7 +1200,7 @@ ipcMain.handle('get-stream', async (_, ytUrl, quality) => {
   try {
     return await getStreamInfo(ytUrl, quality || loadConfig().quality || '192');
   } catch (e) {
-    return { error: e.message };
+    return { error: e.message, code: e.code };
   }
 });
 

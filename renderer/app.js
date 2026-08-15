@@ -364,7 +364,11 @@ async function getStream(ytUrl, force = false) {
   const c = streamCache[ytUrl];
   if (!force && c && c.expireTs > now + 60000) return c.url;
   const res = await window.api.getStream(ytUrl, config.quality || '192');
-  if (res.error) throw new Error(res.error);
+  if (res.error) {
+    const err = new Error(res.error);
+    err.code = res.code; // UNSUPPORTED_LIVE_SOURCE 등 — playTrack에서 자동 스킵 판단용
+    throw err;
+  }
   streamCache[ytUrl] = { url: res.streamUrl, expireTs: now + 5.5*3600*1000 };
   return res.streamUrl;
 }
@@ -409,7 +413,11 @@ async function openSettings() {
   $('cfg-startup').checked = await window.api.getLoginItem();
   $('settings-ov').classList.add('show');
 }
-function closeSettings() { $('settings-ov').classList.remove('show'); }
+// 스킨 선택하면 저장 안 눌러도 바로 미리보기 반영, 저장 없이 닫으면 원래 저장된 테마로
+// 되돌린다(형 요청, 2026-08-16). closeSettings에서 매번 config.theme를 다시 적용하는 방식이라
+// 저장을 눌러 config.theme가 이미 갱신된 경우엔 그대로, 저장 없이 닫은 경우엔 원복된다.
+function closeSettings() { $('settings-ov').classList.remove('show'); applyTheme(config.theme); }
+$('cfg-theme').onchange = () => applyTheme($('cfg-theme').value);
 $('nav-settings').onclick = openSettings;
 $('settings-close').onclick = closeSettings;
 $('settings-ov').addEventListener('click', e => { if(e.target===$('settings-ov')) closeSettings(); });
@@ -694,7 +702,7 @@ function stopAudio() {
 let wasNaturalEnd = false; // 2026-08-07 추천 개인화 — 곡이 끝까지 재생돼서 넘어간 건지(완주),
                             // 사용자가 중간에 다른 곡으로 넘긴 건지(스킵) 구분하는 플래그
 
-async function playTrack(idx, plIdx = currentPl, resumeSec = 0) {
+async function playTrack(idx, plIdx = currentPl, resumeSec = 0, skipChain = 0) {
   const tracks = playlists[plIdx].tracks;
   if (!tracks[idx]) return;
 
@@ -734,7 +742,10 @@ async function playTrack(idx, plIdx = currentPl, resumeSec = 0) {
   try {
     try {
       await attemptLoad(false);
-    } catch {
+    } catch (e1) {
+      // 라이브방송/프리미어 영상은 캐시를 건너뛰고 재시도해도 똑같은 HLS 주소가 나와서
+      // 재시도 자체가 무의미함 — 바로 아래 catch(e)로 던져서 자동 스킵 처리하게 한다(2026-08-16).
+      if (e1.code === 'UNSUPPORTED_LIVE_SOURCE') throw e1;
       await attemptLoad(true);
     }
     isPlaying=true; setPlayIcon(true);
@@ -744,6 +755,19 @@ async function playTrack(idx, plIdx = currentPl, resumeSec = 0) {
     maybeExtendQueue(plIdx); // 큐 보충은 백그라운드로, 재생 시작을 기다리게 하지 않음
     pruneOldAutoTracks(plIdx); // 지나간 추천곡은 최근 10곡만 남기고 정리
   } catch(e) {
+    // 라이브방송/프리미어라 재생 불가능한 곡은 에러로 멈추지 않고, 다음 곡으로 자동으로 넘어간다
+    // (형 요청, 2026-08-16). 직접 재생목록에 추가한 곡은 형이 의도적으로 고른 곡이라 문제가
+    // 있으면 알아야 하니 종전대로 실패 토스트 후 정지하고, 자동추천곡(t.source==='auto')만
+    // 넓게 자동 스킵 대상으로 삼는다 — 실제 테스트해보니 "no supported source" 외에도 yt-dlp가
+    // 포맷 자체를 못 찾는 등 다양한 형태로 실패할 수 있다는 걸 확인해서, 원인 문자열을 일일이
+    // 맞추기보다 "강제 재시도까지 실패한 자동추천곡"이면 전부 스킵 대상으로 넓게 잡았다.
+    // 연속 실패가 이어지는 극단적 상황을 막기 위해 skipChain 5회 제한.
+    if ((e.code === 'UNSUPPORTED_LIVE_SOURCE' || t.source === 'auto') && skipChain < 5) {
+      toast('"'+t.title+'" 곡을 재생할 수 없어 다음 곡으로 넘어갈게요');
+      const n = repeatMode===2 ? idx : shuffle ? Math.floor(Math.random()*tracks.length) : (idx+1)%tracks.length;
+      playTrack(n, plIdx, 0, skipChain+1);
+      return;
+    }
     toast('재생 실패: '+e.message);
     isPlaying=false; setPlayIcon(false);
     currentTrack = prev; playingPl = prevPl;
@@ -960,14 +984,27 @@ function seekBy(sec) {
 artSeekFwd.addEventListener('click', () => seekBy(-5));
 artSeekBack.addEventListener('click', () => seekBy(5));
 
-function togglePlay() {
+// 오래 멈춰뒀다가 다시 재생 누르면 "no supported source"가 뜬다는 형 신고(2026-08-16) 대응 —
+// 오래 방치된 캐시 스트림 주소가 그 사이 죽어있을 가능성을 겨냥해서, 단순 재개(audio.play())가
+// 실패하면 조용히 넘어가지 않고 playTrack을 다시 호출해서 스트림 주소를 새로 받아와 같은
+// 위치(audio.currentTime)에서 이어 재생한다. 확실한 원인 확정은 아니라 방어적 보완 조치.
+async function togglePlay() {
   if (!audio.src) {
     const tracks = playlists[currentPl].tracks;
     if (!tracks.length) { toast('플레이리스트가 비어있습니다'); return; }
     playTrack(0); return;
   }
   if (isPlaying) { audio.pause(); isPlaying=false; setPlayIcon(false); }
-  else { audio.play(); isPlaying=true; setPlayIcon(true); }
+  else {
+    try {
+      await audio.play();
+      isPlaying=true; setPlayIcon(true);
+    } catch {
+      const resumeSec = audio.currentTime || 0;
+      playTrack(currentTrack, playingPl, resumeSec);
+      return;
+    }
+  }
   renderTrackList();
 }
 
