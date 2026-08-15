@@ -286,10 +286,12 @@ async function getStreamInfo(ytUrl, quality = '192') {
 // Search YouTube, return list of results
 // 유튜브뮤직(music.youtube.com) 검색을 직접 걸어봤는데, 일반 유튜브 검색보다 관련성 랭킹이
 // 훨씬 부실해서(엉뚱한 설교/방송 영상이 위로 올라옴) 오히려 결과가 나빠짐 — 그래서 검색 자체는
-// 기존 일반 유튜브 검색을 그대로 쓰고, 그 위에 "제목에 방송성 키워드 있으면 뒤로 밀기"만 적용
-// (형 요청, 2026-07-20 — lrclib 매칭 정확도를 높이려는 목적. 완전히 숨기지 않고 뒤로만 미는 이유는
-// 정식 음원이 없는 곡도 여전히 찾을 수 있게 하기 위함).
-const LIVE_BROADCAST_RE = /(방송|라이브|직캠|live|broadcast)/i;
+// 기존 일반 유튜브 검색을 그대로 쓴다. 방송성 클립("비긴어게인"/"유희열의 스케치북"류 라이브
+// 무대 클립, 직캠, 버스킹 등)은 원래 "뒤로만 밀기"였는데(2026-07-20, lrclib 매칭 정확도 목적),
+// 형이 특정 프로그램 클립이 검색 결과를 도배한다고 리포트(2026-08-16)해서 강화 — 정식 음원 등
+// 깨끗한 결과가 limit개 이상 있으면 방송 클립은 아예 제외하고, 그 곡이 방송 클립으로만 존재하는
+// 경우(정식 음원이 없어서 깨끗한 결과가 부족한 경우)에만 부족한 만큼 채워 넣는다.
+const LIVE_BROADCAST_RE = /(방송|라이브|직캠|버스킹|비긴어게인|스케치북|begin\s*again|live|broadcast|busking)/i;
 
 async function searchYoutube(query, limit = 10) {
   const json = await ytdlp([
@@ -313,8 +315,11 @@ async function searchYoutube(query, limit = 10) {
     } catch { return null; }
   }).filter(Boolean);
 
-  items.sort((a, b) => LIVE_BROADCAST_RE.test(a.title) - LIVE_BROADCAST_RE.test(b.title));
-  return items.slice(0, limit);
+  const isLive = it => LIVE_BROADCAST_RE.test(it.title) || BROADCAST_CHANNEL_RE.test(it.channel);
+  const clean = items.filter(it => !isLive(it));
+  const live = items.filter(isLive);
+  const picks = clean.length >= limit ? clean : clean.concat(live);
+  return picks.slice(0, limit);
 }
 
 // ── 추천 재정렬(개인화 믹스) ────────────────────────────────────────────────────
@@ -359,7 +364,13 @@ async function getMixForVideo(videoId, limit = 20) {
 // 기능의 LIVE_BROADCAST_RE는 "정식 음원이 없을 수도 있으니 숨기지 말고 뒤로만 밀자"는
 // 목적이라 그대로 두고, 이건 완전히 별개의 상수다. 추천은 대체 후보가 늘 넉넉해서
 // 완전히 제외해도 손해가 없고, 형이 검색으로 직접 그런 영상을 듣는 습관과도 안 부딪힌다.
-const MIX_EXCLUDE_RE = /(방송|라이브|직캠|모음|베스트|플레이리스트|live|broadcast|best|playlist)/i;
+// "클립"/"무대" 추가(2026-08-16, 형 스크린샷 리포트 — "[리무진서비스 클립]"류가 안 걸러짐).
+const MIX_EXCLUDE_RE = /(방송|라이브|직캠|모음|베스트|플레이리스트|클립|무대|live|broadcast|best|playlist|clip)/i;
+// 방송사/엔터 클립 전문 채널은 제목에 "라이브"/"방송" 단어가 아예 없는 경우가 많아서(형 스크린샷
+// 실측, 2026-08-16 — "[DJ티비씨] 김필(Feel Kim...)"처럼 채널 브랜딩만 있고 제목엔 방송 신호가
+// 없음) 위 제목 필터만으론 못 잡는다. 실제로 도배 원인으로 지목된 채널명 패턴을 별도로 검사.
+// 새 방송클립 채널이 계속 생길 수 있어 완벽하진 않음 — 여기 안 걸리는 채널은 우클릭 채널차단 병행.
+const BROADCAST_CHANNEL_RE = /(kbs\s*kpop|sbs\s*kpop|mbc\s*kpop|jtbc\s*music|디티비씨|dj\s*티비씨|스브스|디스패치|텐아시아|예능맛집|어디든\s*가요)/i;
 
 // 곡 단위 기록만으론 순위를 못 매긴다 — 믹스에 뜨는 곡은 대부분 한 번도 안 튼 새 곡이라서,
 // "이 채널/아티스트를 얼마나 좋아하나"라는 집계가 재정렬의 실질적인 핵심 신호다. 채널은
@@ -1134,7 +1145,7 @@ ipcMain.handle('get-recommendations', async (_, seedYtUrl, excludeItems, count) 
   if (!seedId) return [];
   try {
     const mix = (await getMixForVideo(seedId, 20))
-      .filter(it => !MIX_EXCLUDE_RE.test(it.title))
+      .filter(it => !MIX_EXCLUDE_RE.test(it.title) && !BROADCAST_CHANNEL_RE.test(it.channel))
       .map(enrichItem);
     const history = loadHistory(account.id);
     const exclude = new Set((excludeItems || []).map(x => x?.id).filter(Boolean));
