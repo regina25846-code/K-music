@@ -297,8 +297,10 @@ async function getStreamInfo(ytUrl, quality = '192') {
 // 경우(정식 음원이 없어서 깨끗한 결과가 부족한 경우)에만 부족한 만큼 채워 넣는다.
 // 영문 키워드는 반드시 \b(단어 경계)로 감싼다 — 안 그러면 "live"가 Alive/Olive/Delivery를,
 // "best"가 Bestie를 오탐하는 걸 실측으로 확인했다(오푸스 검토, 2026-08-16). 한글 키워드는
-// 애초에 이런 식의 우연한 부분일치 위험이 낮아서 그대로 둔다.
-const LIVE_BROADCAST_RE = /(방송|라이브|직캠|버스킹|비긴어게인|스케치북)|\b(begin\s*again|live|broadcast|busking)\b/i;
+// 애초에 이런 식의 우연한 부분일치 위험이 낮아서 그대로 둔다. 's?'로 복수형(livestream 앞의
+// "lives"류, broadcasts 등)까지만 허용 — \b 하나만으론 "livestream"/"broadcasts" 같은 흔한
+// 변형을 놓친다는 걸 오푸스 2차 검증에서 재확인.
+const LIVE_BROADCAST_RE = /(방송|라이브|직캠|버스킹|비긴어게인|스케치북)|\b(begin\s*again|live|broadcast|busking)s?\b/i;
 
 async function searchYoutube(query, limit = 10) {
   const json = await ytdlp([
@@ -373,8 +375,10 @@ async function getMixForVideo(videoId, limit = 20) {
 // 완전히 제외해도 손해가 없고, 형이 검색으로 직접 그런 영상을 듣는 습관과도 안 부딪힌다.
 // "클립"/"무대" 추가(2026-08-16, 형 스크린샷 리포트 — "[리무진서비스 클립]"류가 안 걸러짐).
 // 영문 키워드는 \b로 감싼다 — "clip"이 Eclipse를, "live"가 Alive를 오탐하던 걸 실측 확인
-// (오푸스 검토, 2026-08-16). 한글은 부분일치 위험이 낮아서 그대로 둔다.
-const MIX_EXCLUDE_RE = /(방송|라이브|직캠|모음|베스트|플레이리스트|클립|무대)|\b(live|broadcast|best|playlist|clip)\b/i;
+// (오푸스 검토, 2026-08-16). 한글은 부분일치 위험이 낮아서 그대로 둔다. 's?'로 복수형(Clips/
+// Playlists/Broadcasts)까지 커버 — \b만으론 이런 흔한 복수형을 놓친다는 걸 오푸스 2차 검증에서
+// 재확인(단, livestream처럼 다른 단어에 곧바로 붙는 합성어까지는 못 잡음 — 잔여 한계로 수용).
+const MIX_EXCLUDE_RE = /(방송|라이브|직캠|모음|베스트|플레이리스트|클립|무대)|\b(live|broadcast|best|playlist|clip)s?\b/i;
 // 방송사/엔터 클립 전문 채널은 제목에 "라이브"/"방송" 단어가 아예 없는 경우가 많아서(형 스크린샷
 // 실측, 2026-08-16 — "[DJ티비씨] 김필(Feel Kim...)"처럼 채널 브랜딩만 있고 제목엔 방송 신호가
 // 없음) 위 제목 필터만으론 못 잡는다. 실제로 도배 원인으로 지목된 채널명 패턴을 별도로 검사.

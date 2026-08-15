@@ -686,6 +686,10 @@ function setPlayIcon(playing) {
 }
 
 function stopAudio() {
+  // 로딩/재시도 중이던 곡을 재생목록/재생목록 자체 삭제로 멈추는 경우, 그 진행 중이던
+  // playTrack이 뒤늦게 깨어나 이미 지워진 곡을 다시 재생시키는 걸 막는다(오푸스 2차 검증,
+  // 2026-08-16 — playGen 가드가 stopAudio와 연동돼있지 않던 구멍).
+  playGen++;
   audio.pause(); audio.src='';
   isPlaying=false; playingPl=-1; setPlayIcon(false);
   progFill.style.width='0%'; tCur.textContent='0:00';
@@ -739,6 +743,12 @@ async function playTrack(idx, plIdx = currentPl, resumeSec = 0, skipChain = 0) {
   // 감안해서 3초 간격으로 최대 3번까지 재시도하도록 확장.
   const attemptLoad = async (force) => {
     const url = await getStream(t.ytUrl, force);
+    // getStream이 오래 걸리는(캐시 미스) 동안 다른 곡이 눌려서 이미 낡은 세대가 됐으면, 여기서
+    // 멈춰서 audio.src를 건드리지 않는다 — 재시도 대기(3초) 구간만 막던 이전 가드로는 이
+    // "첫 응답을 기다리는 동안" 구간이 안 막혀서 화면/소리 어긋남이 그대로 재현됐다(오푸스
+    // 2차 검증, 2026-08-16). 여기서 조용히 반환하면 바깥 루프는 예외 없이 성공한 것처럼
+    // break하지만, 루프 직후의 myGen!==playGen 체크가 그 상태를 잡아서 후속 처리를 생략한다.
+    if (myGen !== playGen) return;
     audio.src = url;
     audio.volume = volSlider.value/100;
     if (resumeSec > 0) audio.currentTime = resumeSec;
