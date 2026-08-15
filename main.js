@@ -401,6 +401,29 @@ function scoreCandidate(item, history) {
   return score;
 }
 
+// 반복방지 창이 재생목록에 남아있는 최근 ~13곡(약 1시간)뿐이라 인기곡이 금방 다시 순환하던
+// 문제(형 리포트, 2026-08-16) — history.tracks/channels/artists에 이미 쌓이고 있던
+// lastPlayedAt을 실제로 읽어서, 재생목록을 갈아타거나 앱을 재시작해도 유지되는 시간 기준
+// 쿨다운을 추가한다. 곡 자체는 3일간 사실상 배제(형 확정, 2026-08-16), 가수/채널은 완전
+// 차단이 아니라 시간이 지나며 자연히 풀리는 감점만 줘서 후보가 말라 stale 폴백을 다시
+// 타는 역효과(원인 3, 채널 15개 차단 시 겪었던 문제)를 반복하지 않게 한다.
+const COOLDOWN_MS = { track: 3 * 24 * 3600e3, artist: 6 * 3600e3, channel: 3 * 3600e3 };
+function cooldownPenalty(item, history, now = Date.now()) {
+  let penalty = 0;
+  const ageMs = iso => iso ? now - Date.parse(iso) : Infinity;
+
+  const trackAge = ageMs(history.tracks[item.id]?.lastPlayedAt);
+  if (trackAge < COOLDOWN_MS.track) penalty -= 1000;
+
+  const arAge = ageMs(item.artist && history.artists?.[item.artist]?.lastPlayedAt);
+  if (arAge < COOLDOWN_MS.artist) penalty -= 20 * (1 - arAge / COOLDOWN_MS.artist);
+
+  const chAge = ageMs(item.channel && history.channels?.[item.channel]?.lastPlayedAt);
+  if (chAge < COOLDOWN_MS.channel) penalty -= 10 * (1 - chAge / COOLDOWN_MS.channel);
+
+  return penalty;
+}
+
 // 시드/후보 아이템에 아티스트명과 시대(연대) 라벨을 붙인다. reorderByHistory에 넘기기 전에
 // 한 번만 호출하면 됨 — record-play-event 쪽에서도 같은 규칙으로 붙여야 스코어링과 기록이 어긋나지 않는다.
 function enrichItem(item) {
@@ -463,7 +486,7 @@ function buildMaxLogByDecade(ranked, viewCounts) {
 // 기본 순서 그대로 나오고, 재생기록이 쌓일수록 그 위로 형 취향 신호가 얹히는 구조다.
 function reorderByHistory(items, history) {
   return items
-    .map(it => ({ it, score: scoreCandidate(it, history) }))
+    .map(it => ({ it, score: scoreCandidate(it, history) + cooldownPenalty(it, history) }))
     .filter(x => x.score > -Infinity)
     .sort((a, b) => b.score - a.score)
     .map(x => x.it);
@@ -490,7 +513,14 @@ function titleTokens(title) {
     .filter(w => w.length >= 2 && !TITLE_NOISE_WORDS.has(w));
 }
 function looksLikeSameSong(a, b) {
-  const durDiff = Math.abs((a.duration || 0) - (b.duration || 0));
+  const durA = a.duration || 0, durB = b.duration || 0;
+  const durDiff = Math.abs(durA - durB);
+  // 같은 음원 재업로드는 재생시간이 초 단위까지 완전히 일치하는 경우가 흔한데(실측: 성시경
+  // "희재" 282/282초, 엠씨더맥스 "행복하지 말아요" 359/359초), 공식채널판은 제목이 로마자
+  // 표기("HeeJae")라 아래 토큰 겹침이 0이 되어 위 케이스가 전부 놓쳐지고 있었다(형 리포트,
+  // 2026-08-16 — 채널을 차단해도 같은 곡이 다른 채널로 계속 반복 추천됨). 60초 넘는 곡에서
+  // 오차 0초로 겹칠 확률은 사실상 무시할 만해서 토큰 겹침 여부와 무관하게 동일곡으로 인정한다.
+  if (durA > 60 && durDiff === 0) return true;
   const ta = titleTokens(a.title);
   const tbArr = titleTokens(b.title);
   const tb = new Set(tbArr);
@@ -1120,8 +1150,10 @@ ipcMain.handle('get-recommendations', async (_, seedYtUrl, excludeItems, count) 
       try {
         const viewCounts = await fetchViewCounts(ranked.map(it => it.id), cfg.ytApiKey);
         const maxLogByDecade = buildMaxLogByDecade(ranked, viewCounts);
+        // cooldownPenalty도 다시 더해야 한다 — 안 그러면 API 키를 넣어둔 계정에서는 이 재정렬이
+        // 위 reorderByHistory에서 적용한 시간기반 반복방지를 그대로 지워버리게 된다.
         ranked = ranked
-          .map(it => ({ it, score: scoreCandidate(it, history) + popularityScore(it, viewCounts, maxLogByDecade) }))
+          .map(it => ({ it, score: scoreCandidate(it, history) + cooldownPenalty(it, history) + popularityScore(it, viewCounts, maxLogByDecade) }))
           .sort((a, b) => b.score - a.score)
           .map(x => x.it);
       } catch { /* API 실패해도 조용히 기존 취향 순서 유지 — 추천 자체가 막히면 안 됨 */ }
@@ -1183,7 +1215,17 @@ ipcMain.handle('record-play-event', (_, ytUrl, meta, eventType) => {
 
   if (eventType === 'play') { t.playCount++; ch.playCount++; if (arObj) arObj.playCount++; if (dcObj) dcObj.playCount++; }
   else if (eventType === 'complete') { t.completeCount++; }
-  else if (eventType === 'skip') { t.skipCount++; ch.skipCount++; if (arObj) arObj.skipCount++; if (dcObj) dcObj.skipCount++; }
+  else if (eventType === 'skip') {
+    // 'skip'은 항상 그 재생의 'play' 기록 위에 추가로 발생하는데, 예전엔 skipCount만 올리고
+    // playCount는 그대로 둬서 채널/아티스트 점수가 playCount*가중치 - skipCount*가중치로
+    // 계산될 때 가중치 차이(아티스트 2.5 vs 2.0) 때문에 스킵할수록 오히려 점수가 순증가하는
+    // 버그가 있었다(형 실사용 리포트, 2026-08-16 — 자주 넘기는 곡의 가수가 계속 더 나옴).
+    // 스킵은 해당 재생을 "취소"하는 의미로 보고, 직전 play 가산을 되돌린 뒤 페널티를 적용한다.
+    t.skipCount++;
+    ch.skipCount++; ch.playCount = Math.max(0, ch.playCount - 1);
+    if (arObj) { arObj.skipCount++; arObj.playCount = Math.max(0, arObj.playCount - 1); }
+    if (dcObj) { dcObj.skipCount++; dcObj.playCount = Math.max(0, dcObj.playCount - 1); }
+  }
 
   if (typeof meta?.listenedSec === 'number' && meta.listenedSec > 0) {
     t.totalListenedSec += meta.listenedSec;
