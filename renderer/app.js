@@ -730,8 +730,9 @@ async function playTrack(idx, plIdx = currentPl, resumeSec = 0, skipChain = 0) {
   showLoad('스트리밍 로딩 중...');
   // "재생 실패: no supported source" 대응 — 캐시된 스트림 URL이 재생 시점엔 이미 만료됐거나
   // 문제가 생겼을 가능성을 겨냥해서, 첫 시도가 실패하면 캐시를 건너뛰고 완전히 새로 스트림
-  // URL을 받아와 한 번만 더 시도한다. 이것도 실패해야 토스트를 띄운다(2026-08-08 — 예전에
-  // 문서에만 계획으로 남고 실제 코드 반영이 안 돼있던 걸 재발견해서 이번에 실제로 구현).
+  // URL을 받아와 재시도한다(2026-08-08 최초 구현). 형이 실사용 중 "오류 떠도 서너 번 다시
+  // 누르면 되던데"라고 리포트(2026-08-16) — 즉시 스킵/정지하지 말고 버퍼링/일시적 문제를
+  // 감안해서 3초 간격으로 최대 3번까지 재시도하도록 확장.
   const attemptLoad = async (force) => {
     const url = await getStream(t.ytUrl, force);
     audio.src = url;
@@ -739,15 +740,23 @@ async function playTrack(idx, plIdx = currentPl, resumeSec = 0, skipChain = 0) {
     if (resumeSec > 0) audio.currentTime = resumeSec;
     await audio.play();
   };
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
   try {
-    try {
-      await attemptLoad(false);
-    } catch (e1) {
-      // 라이브방송/프리미어 영상은 캐시를 건너뛰고 재시도해도 똑같은 HLS 주소가 나와서
-      // 재시도 자체가 무의미함 — 바로 아래 catch(e)로 던져서 자동 스킵 처리하게 한다(2026-08-16).
-      if (e1.code === 'UNSUPPORTED_LIVE_SOURCE') throw e1;
-      await attemptLoad(true);
+    let lastErr = null;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        await attemptLoad(attempt > 1); // 첫 시도는 캐시 사용, 이후는 매번 강제로 새로 받아옴
+        lastErr = null;
+        break;
+      } catch (e1) {
+        lastErr = e1;
+        // 라이브방송/프리미어 영상은 재시도해도 똑같은 HLS 주소가 나와서 재시도 자체가
+        // 무의미함 — 바로 중단하고 아래 catch(e)로 넘겨 자동 스킵 처리하게 한다(2026-08-16).
+        if (e1.code === 'UNSUPPORTED_LIVE_SOURCE') break;
+        if (attempt < 3) await sleep(3000);
+      }
     }
+    if (lastErr) throw lastErr;
     isPlaying=true; setPlayIcon(true);
     await saveCfg({lastPlId: playlists[plIdx].id, lastTrackIdx: idx, lastPos: resumeSec});
     if (inLyrics) ensureLyricsLoaded();
