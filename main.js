@@ -18,8 +18,12 @@ if (!fs.existsSync(HISTORY_DIR)) fs.mkdirSync(HISTORY_DIR, { recursive: true });
 function loadConfig() {
   try { return JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8')); } catch { return {}; }
 }
+// config.json/playlists.json은 재생 중 5초마다·큐 보충마다 자주 쓰이는 파일인데도 계정/기록
+// 파일(writeJsonAtomic)과 달리 예전부터 그냥 writeFileSync였다 — 쓰는 도중 앱이 강제종료되면
+// 테마/볼륨/API키/재생목록이 반쪽짜리 파일로 깨질 수 있었다(오푸스 검토, 2026-08-16). 아래
+// writeJsonAtomic으로 통일(임시파일에 쓰고 완성되면 rename).
 function saveConfig(cfg) {
-  fs.writeFileSync(CONFIG_FILE, JSON.stringify(cfg, null, 2));
+  writeJsonAtomic(CONFIG_FILE, cfg);
 }
 function loadPlaylists() {
   try { return JSON.parse(fs.readFileSync(PLAYLISTS_FILE, 'utf8')); } catch {
@@ -27,7 +31,7 @@ function loadPlaylists() {
   }
 }
 function savePlaylists(pl) {
-  fs.writeFileSync(PLAYLISTS_FILE, JSON.stringify(pl, null, 2));
+  writeJsonAtomic(PLAYLISTS_FILE, pl);
 }
 function loadLyricsCache() {
   try { return JSON.parse(fs.readFileSync(LYRICS_CACHE_FILE, 'utf8')); } catch { return {}; }
@@ -291,7 +295,10 @@ async function getStreamInfo(ytUrl, quality = '192') {
 // 형이 특정 프로그램 클립이 검색 결과를 도배한다고 리포트(2026-08-16)해서 강화 — 정식 음원 등
 // 깨끗한 결과가 limit개 이상 있으면 방송 클립은 아예 제외하고, 그 곡이 방송 클립으로만 존재하는
 // 경우(정식 음원이 없어서 깨끗한 결과가 부족한 경우)에만 부족한 만큼 채워 넣는다.
-const LIVE_BROADCAST_RE = /(방송|라이브|직캠|버스킹|비긴어게인|스케치북|begin\s*again|live|broadcast|busking)/i;
+// 영문 키워드는 반드시 \b(단어 경계)로 감싼다 — 안 그러면 "live"가 Alive/Olive/Delivery를,
+// "best"가 Bestie를 오탐하는 걸 실측으로 확인했다(오푸스 검토, 2026-08-16). 한글 키워드는
+// 애초에 이런 식의 우연한 부분일치 위험이 낮아서 그대로 둔다.
+const LIVE_BROADCAST_RE = /(방송|라이브|직캠|버스킹|비긴어게인|스케치북)|\b(begin\s*again|live|broadcast|busking)\b/i;
 
 async function searchYoutube(query, limit = 10) {
   const json = await ytdlp([
@@ -365,7 +372,9 @@ async function getMixForVideo(videoId, limit = 20) {
 // 목적이라 그대로 두고, 이건 완전히 별개의 상수다. 추천은 대체 후보가 늘 넉넉해서
 // 완전히 제외해도 손해가 없고, 형이 검색으로 직접 그런 영상을 듣는 습관과도 안 부딪힌다.
 // "클립"/"무대" 추가(2026-08-16, 형 스크린샷 리포트 — "[리무진서비스 클립]"류가 안 걸러짐).
-const MIX_EXCLUDE_RE = /(방송|라이브|직캠|모음|베스트|플레이리스트|클립|무대|live|broadcast|best|playlist|clip)/i;
+// 영문 키워드는 \b로 감싼다 — "clip"이 Eclipse를, "live"가 Alive를 오탐하던 걸 실측 확인
+// (오푸스 검토, 2026-08-16). 한글은 부분일치 위험이 낮아서 그대로 둔다.
+const MIX_EXCLUDE_RE = /(방송|라이브|직캠|모음|베스트|플레이리스트|클립|무대)|\b(live|broadcast|best|playlist|clip)\b/i;
 // 방송사/엔터 클립 전문 채널은 제목에 "라이브"/"방송" 단어가 아예 없는 경우가 많아서(형 스크린샷
 // 실측, 2026-08-16 — "[DJ티비씨] 김필(Feel Kim...)"처럼 채널 브랜딩만 있고 제목엔 방송 신호가
 // 없음) 위 제목 필터만으론 못 잡는다. 실제로 도배 원인으로 지목된 채널명 패턴을 별도로 검사.
@@ -523,7 +532,13 @@ function titleTokens(title) {
     .split(' ')
     .filter(w => w.length >= 2 && !TITLE_NOISE_WORDS.has(w));
 }
-function looksLikeSameSong(a, b) {
+// strict=true면 재생시간 완전일치 단축판정을 안 쓴다 — 20개 안팎인 믹스 내부 중복제거
+// (dedupeSimilarSongs)에서는 초단위 완전일치가 우연일 확률이 낮아 안전했지만, 재생목록
+// 전체(형처럼 오래 쓰면 수십~수백곡)와 대조하는 alreadyQueued 쪽에 그대로 쓰면 정수초
+// 길이가 우연히 겹치는 서로 다른 곡까지 대량으로 "같은 곡"으로 오판해서 추천 후보가
+// 말라버리는 문제가 있었다(오푸스 검토, 2026-08-16 — 재생목록 200곡 기준 오탐률 74% 시뮬레이션
+// 확인). 그런 넓은 대조에는 제목 토큰 겹침을 반드시 요구하는 기존 판정만 쓴다.
+function looksLikeSameSong(a, b, strict = false) {
   const durA = a.duration || 0, durB = b.duration || 0;
   const durDiff = Math.abs(durA - durB);
   // 같은 음원 재업로드는 재생시간이 초 단위까지 완전히 일치하는 경우가 흔한데(실측: 성시경
@@ -531,7 +546,7 @@ function looksLikeSameSong(a, b) {
   // 표기("HeeJae")라 아래 토큰 겹침이 0이 되어 위 케이스가 전부 놓쳐지고 있었다(형 리포트,
   // 2026-08-16 — 채널을 차단해도 같은 곡이 다른 채널로 계속 반복 추천됨). 60초 넘는 곡에서
   // 오차 0초로 겹칠 확률은 사실상 무시할 만해서 토큰 겹침 여부와 무관하게 동일곡으로 인정한다.
-  if (durA > 60 && durDiff === 0) return true;
+  if (!strict && durA > 60 && durDiff === 0) return true;
   const ta = titleTokens(a.title);
   const tbArr = titleTokens(b.title);
   const tb = new Set(tbArr);
@@ -1152,7 +1167,7 @@ ipcMain.handle('get-recommendations', async (_, seedYtUrl, excludeItems, count) 
     const alreadyQueued = excludesAsSongList(excludeItems);
     let ranked = reorderByHistory(mix, history).filter(it => !exclude.has(it.id));
     ranked = dedupeSimilarSongs(ranked);
-    ranked = ranked.filter(it => !alreadyQueued.some(ex => looksLikeSameSong(it, ex)));
+    ranked = ranked.filter(it => !alreadyQueued.some(ex => looksLikeSameSong(it, ex, true)));
 
     // 조회수 인기도 가산점 — 사용자가 설정에서 유튜브 API 키를 넣어둔 경우에만 시도.
     // 후보가 이미 20개 이하로 추려진 상태라 배치 1회 호출로 전부 조회 가능(50개까지 배치 지원).
@@ -1251,7 +1266,11 @@ ipcMain.handle('record-play-event', (_, ytUrl, meta, eventType) => {
 
 ipcMain.handle('get-stream', async (_, ytUrl, quality) => {
   try {
-    return await getStreamInfo(ytUrl, quality || loadConfig().quality || '192');
+    // 음질 설정 UI를 없앤 뒤(2026-08-16, 유튜브가 애초에 129kbps 이상 오디오를 안 줘서
+    // 320k가 죽어있던 설정이었음)에도 config.json에 예전에 저장된 quality 값(특히 128)이
+    // 남아있으면 계속 최저음질에 고정되는 채로 UI로는 바꿀 방법이 없어지는 문제가 있었다
+    // (오푸스 검토, 2026-08-16). 저장된 값을 더는 참조하지 않고 항상 고정 기본값만 쓴다.
+    return await getStreamInfo(ytUrl, quality || '192');
   } catch (e) {
     return { error: e.message, code: e.code };
   }

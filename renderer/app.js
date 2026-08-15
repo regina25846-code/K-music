@@ -9,6 +9,9 @@ let playingPl = -1;  // which playlist the currently-loaded track actually belon
                       // from currentPl (whichever tab the user is just LOOKING at), since those
                       // can differ once you view a different playlist while something plays
 let currentTrack = -1;
+let playGen = 0; // playTrack() 재생 시도 세대 번호 — 3초 재시도 대기 중에 다른 곡을 누르면
+                  // 오래된 재생 시도가 뒤늦게 깨어나 audio.src를 도로 덮어써서 화면과 소리가
+                  // 어긋나던 문제 방지(오푸스 검토, 2026-08-16). playTrack() 참고.
 let lastPosSaveTs = 0;
 let isPlaying = false;
 let repeatMode = 0;  // 0=off 1=all 2=one
@@ -52,7 +55,6 @@ const lyrMask    = $('lyr-preview-mask');
 const lyrResetLink = $('lyr-manual-sync-reset');
 const volPct     = $('vol-pct');
 const vuMeter    = $('vu');
-const artBadge   = $('art-badge');
 const playerEl   = document.querySelector('.player');
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -178,8 +180,6 @@ function toast(msg) {
 }
 function showLoad(msg='처리 중...') { $('loading-text').textContent = msg; loading.classList.add('show'); }
 function hideLoad() { loading.classList.remove('show'); }
-
-function updateQualityBadge() { artBadge.textContent = `${config.quality || '192'}k`; }
 
 // 앨범아트 색을 뽑아서 now-playing 배경에 은은한 글로우로 반영 — 썸네일 CDN이 CORS를 안 열어주면
 // 캔버스가 tainted 상태가 돼서 getImageData가 예외를 던짐. 그 경우 그냥 글로우 없이 기본색(--prog)으로 폴백.
@@ -363,7 +363,7 @@ async function getStream(ytUrl, force = false) {
   const now = Date.now();
   const c = streamCache[ytUrl];
   if (!force && c && c.expireTs > now + 60000) return c.url;
-  const res = await window.api.getStream(ytUrl, config.quality || '192');
+  const res = await window.api.getStream(ytUrl);
   if (res.error) {
     const err = new Error(res.error);
     err.code = res.code; // UNSUPPORTED_LIVE_SOURCE 등 — playTrack에서 자동 스킵 판단용
@@ -402,7 +402,6 @@ function applyTheme(theme) {
 // ── settings overlay ──────────────────────────────────────────────────────────
 async function openSettings() {
   updateAccountUi();
-  $('cfg-quality').value = config.quality || '192';
   $('cfg-theme').value = config.theme || 'default';
   $('cfg-auto').checked = !!config.autoplay;
   $('cfg-resume').checked = !!config.resume;
@@ -448,7 +447,6 @@ $('btn-yt-api-check').onclick = async () => {
 $('settings-save').onclick = async () => {
   const theme = $('cfg-theme').value;
   await saveCfg({
-    quality: $('cfg-quality').value,
     theme,
     autoplay: $('cfg-auto').checked,
     resume: $('cfg-resume').checked,
@@ -456,7 +454,6 @@ $('settings-save').onclick = async () => {
     ytApiKey: $('cfg-yt-api-key').value.trim()
   });
   applyTheme(theme);
-  updateQualityBadge();
   await window.api.setLoginItem($('cfg-startup').checked);
   closeSettings();
 };
@@ -702,9 +699,16 @@ function stopAudio() {
 let wasNaturalEnd = false; // 2026-08-07 추천 개인화 — 곡이 끝까지 재생돼서 넘어간 건지(완주),
                             // 사용자가 중간에 다른 곡으로 넘긴 건지(스킵) 구분하는 플래그
 
+// 자동추천곡이 연달아 재생 불가능할 때 몇 곡까지 자동으로 건너뛸지 상한. 곡당 재시도(3초
+// 간격 3회 + yt-dlp 자체 타임아웃)가 최악의 경우 1분 반 가까이 걸릴 수 있어서, 예전 상한
+// 5는 인터넷이 아예 끊긴 상태에서는 로딩 화면만 8분 가까이 뜰 수 있었다(오푸스 검토,
+// 2026-08-16). 3으로 낮춰서 최악의 경우도 몇 분 안으로 줄인다.
+const AUTO_SKIP_CHAIN_MAX = 3;
+
 async function playTrack(idx, plIdx = currentPl, resumeSec = 0, skipChain = 0) {
   const tracks = playlists[plIdx].tracks;
   if (!tracks[idx]) return;
+  const myGen = ++playGen; // 이 재생 시도 고유 번호 — 아래서 재시도 대기 후 깨어날 때마다 재확인
 
   // 직전 곡의 완주/스킵을 기록(재정렬 알고리즘의 핵심 신호). resumeSec>0인 이어듣기 재시작
   // 케이스는 currentTrack===idx라서 아래 조건에서 자연히 제외됨.
@@ -744,6 +748,9 @@ async function playTrack(idx, plIdx = currentPl, resumeSec = 0, skipChain = 0) {
   try {
     let lastErr = null;
     for (let attempt = 1; attempt <= 3; attempt++) {
+      // 3초 대기 중에 다른 곡이 눌려서 이 재생 시도가 이미 낡은 세대가 됐으면, 여기서 멈춰서
+      // audio.src를 도로 덮어쓰지 않는다(오푸스 검토, 2026-08-16 — 화면·소리 어긋남 버그).
+      if (myGen !== playGen) return;
       try {
         await attemptLoad(attempt > 1); // 첫 시도는 캐시 사용, 이후는 매번 강제로 새로 받아옴
         lastErr = null;
@@ -756,6 +763,7 @@ async function playTrack(idx, plIdx = currentPl, resumeSec = 0, skipChain = 0) {
         if (attempt < 3) await sleep(3000);
       }
     }
+    if (myGen !== playGen) return; // 재시도 끝난 시점에도 낡은 세대면 성공/실패 후처리 자체를 생략
     if (lastErr) throw lastErr;
     isPlaying=true; setPlayIcon(true);
     await saveCfg({lastPlId: playlists[plIdx].id, lastTrackIdx: idx, lastPos: resumeSec});
@@ -764,23 +772,27 @@ async function playTrack(idx, plIdx = currentPl, resumeSec = 0, skipChain = 0) {
     maybeExtendQueue(plIdx); // 큐 보충은 백그라운드로, 재생 시작을 기다리게 하지 않음
     pruneOldAutoTracks(plIdx); // 지나간 추천곡은 최근 10곡만 남기고 정리
   } catch(e) {
+    if (myGen !== playGen) return; // 낡은 세대는 스킵/토스트/롤백도 하지 않고 조용히 물러남
     // 라이브방송/프리미어라 재생 불가능한 곡은 에러로 멈추지 않고, 다음 곡으로 자동으로 넘어간다
     // (형 요청, 2026-08-16). 직접 재생목록에 추가한 곡은 형이 의도적으로 고른 곡이라 문제가
     // 있으면 알아야 하니 종전대로 실패 토스트 후 정지하고, 자동추천곡(t.source==='auto')만
     // 넓게 자동 스킵 대상으로 삼는다 — 실제 테스트해보니 "no supported source" 외에도 yt-dlp가
     // 포맷 자체를 못 찾는 등 다양한 형태로 실패할 수 있다는 걸 확인해서, 원인 문자열을 일일이
     // 맞추기보다 "강제 재시도까지 실패한 자동추천곡"이면 전부 스킵 대상으로 넓게 잡았다.
-    // 연속 실패가 이어지는 극단적 상황을 막기 위해 skipChain 5회 제한.
-    if ((e.code === 'UNSUPPORTED_LIVE_SOURCE' || t.source === 'auto') && skipChain < 5) {
+    // 연속 실패가 이어지는 극단적 상황을 막기 위해 skipChain 상한(아래 참고).
+    // 한곡반복(repeatMode===2) 상태에서 재생 불가능한 곡이면 "다음곡"이 자기 자신이 되어
+    // 안 되는 곡을 skipChain 상한까지 헛되이 반복하던 버그가 있었다(오푸스 검토, 2026-08-16)
+    // — 자동 스킵 경로에서는 반복모드를 무시하고 항상 진짜 다음 곡으로 넘어간다.
+    if ((e.code === 'UNSUPPORTED_LIVE_SOURCE' || t.source === 'auto') && skipChain < AUTO_SKIP_CHAIN_MAX) {
       toast('"'+t.title+'" 곡을 재생할 수 없어 다음 곡으로 넘어갈게요');
-      const n = repeatMode===2 ? idx : shuffle ? Math.floor(Math.random()*tracks.length) : (idx+1)%tracks.length;
+      const n = shuffle ? Math.floor(Math.random()*tracks.length) : (idx+1)%tracks.length;
       playTrack(n, plIdx, 0, skipChain+1);
       return;
     }
     toast('재생 실패: '+e.message);
     isPlaying=false; setPlayIcon(false);
     currentTrack = prev; playingPl = prevPl;
-  } finally { hideLoad(); renderTrackList(); }
+  } finally { if (myGen === playGen) { hideLoad(); renderTrackList(); } }
 }
 
 // ── 가사 ──────────────────────────────────────────────────────────────────────
@@ -1348,7 +1360,6 @@ $('btn-pin').onclick = async function() {
   playlists = await window.api.getPlaylists();
   if (!playlists?.length) playlists=[{id:uid(),name:'My Playlist',tracks:[]}];
   applyTheme(config.theme);
-  updateQualityBadge();
   volSlider.value = config.volume??80;
   audio.volume = volSlider.value/100;
   updateVolSlider();

@@ -294,12 +294,6 @@ body.lyrics-mode .art-wrap {
 }
 .art-wrap:hover .art-overlay { opacity: 1; }
 .art-overlay span { font-size: 10px; font-weight: 700; color: #fff; }
-.art-badge {
-  position: absolute; right: 6px; bottom: 6px; font-family: var(--mono); font-size: 9px; font-weight: 600;
-  letter-spacing: 0.06em; color: #fff; background: rgba(0,0,0,0.55); backdrop-filter: blur(4px);
-  padding: 3px 7px; border-radius: 6px; transition: opacity 0.3s;
-}
-body.lyrics-mode .art-badge { opacity: 0; }
 
 /* ── VU METER ── */
 .vu { width: 100%; margin: 12px 0 4px; }
@@ -1046,16 +1040,6 @@ select option { background: var(--card); color: var(--text); }
   border-radius: 8px;
   box-shadow: inset 0 0 0 1px rgba(50,32,10,0.5), inset 0 2px 8px rgba(30,18,6,0.4);
 }
-/* ---- bitrate badge: brass chip with fixed dark text on vintage skins (dark glass only on flat skins) ---- */
-[data-theme="ambient"] .art-badge, [data-theme="midnight"] .art-badge,
-[data-theme="vgraphite"] .art-badge,
-[data-theme="vpaper"] .art-badge
-{
-  color: #3a2a10; font-weight: 700; backdrop-filter: none;
-  background: linear-gradient(180deg, var(--surf-hi), var(--surf));
-  box-shadow: inset 0 1px 0 rgba(255,246,220,0.6), 0 1px 2px rgba(0,0,0,0.4);
-}
-
 /* ---- progress gauge: engraved channel + tick marks + dome sphere handle + distressed fill (all themes) ---- */
 .progress-bar {
   height: 12px; border-radius: 7px; background: linear-gradient(180deg, var(--paper-3), var(--paper-2));
@@ -1291,7 +1275,6 @@ select option { background: var(--card); color: var(--text); }
       <div class="art-wrap" id="art-wrap">
         <img class="album-art default" id="album-art" src="data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==" alt="" draggable="false" onerror="this.src='data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw=='; this.classList.add('default')"/>
         <div class="art-overlay"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><path d="M9 9l12-2"/><circle cx="6" cy="18" r="3"/></svg><span id="art-overlay-label">가사</span></div>
-        <div class="art-badge" id="art-badge">192k</div>
       </div>
       <div class="art-seek" id="art-seek-back" title="5초 뒤로"></div>
     </div>
@@ -1433,20 +1416,6 @@ select option { background: var(--card); color: var(--text); }
               <a href="#" id="yt-api-key-guide">발급 및 설정방법</a>
               <span class="yt-api-status" id="yt-api-status"></span>
             </div>
-          </div>
-        </div>
-      </div>
-      <div>
-        <div class="set-group-lab">오디오</div>
-        <div class="settings-row">
-          <div class="srow-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 14h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7a9 9 0 0 1 18 0v7a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3"/></svg></div>
-          <div class="srow-text"><div class="srow-label">음질 설정</div><div class="srow-sub">스트리밍 비트레이트 · 128/192/320k</div></div>
-          <div class="srow-ctrl">
-            <select id="cfg-quality">
-              <option value="128">128k</option>
-              <option value="192" selected>192k</option>
-              <option value="320">320k</option>
-            </select>
           </div>
         </div>
       </div>
