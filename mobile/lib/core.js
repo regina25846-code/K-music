@@ -1,11 +1,21 @@
-const { app, BrowserWindow, ipcMain, shell, Tray, Menu, nativeImage, screen, clipboard } = require('electron');
-const { autoUpdater } = require('electron-updater');
-const path = require('path');
-const fs = require('fs');
-const crypto = require('crypto');
-const { execFile, spawn } = require('child_process');
+// ⚠️ 이 파일은 자동 생성됩니다 — 직접 고치지 마세요.
+// 생성기: mobile/build_core.js  (원본: main.js)
+// 고쳐야 할 내용이 있으면 main.js를 고치고 `node mobile/build_core.js`를 다시 돌리세요.
+//
+// 아래 본문은 main.js에서 electron 의존성이 없는 구간만 글자 그대로 잘라낸 것입니다.
+// 주석까지 원본 그대로라, 왜 이렇게 짜여 있는지는 전부 원본 주석이 설명합니다.
 
-const DATA_DIR = path.join(app.getPath('userData'), 'kris-music');
+const fs = require('fs');
+const path = require('path');
+const os = require('os');
+const crypto = require('crypto');
+const { execFile } = require('child_process');
+
+// 데스크톱 앱은 electron의 app.getPath('userData') 아래에 데이터를 두지만, 이 서버는
+// electron 없이 맥미니에서 도는 순수 Node 프로세스라 경로를 직접 정한다.
+// ⚠️ 이 폴더는 형이 윈도우 PC에서 쓰는 데스크톱 앱의 데이터와 별개다 — 재생목록/재생기록이
+// 자동으로 공유되지 않는다는 뜻이고, 동기화 방식은 아직 정해지지 않은 별도 과제다.
+const DATA_DIR = process.env.KMUSIC_DATA_DIR || path.join(os.homedir(), '.openclaw', 'kris-music-mobile');
 const CONFIG_FILE = path.join(DATA_DIR, 'config.json');
 const PLAYLISTS_FILE = path.join(DATA_DIR, 'playlists.json');
 const LYRICS_CACHE_FILE = path.join(DATA_DIR, 'lyrics-cache.json');
@@ -15,6 +25,53 @@ const HISTORY_DIR = path.join(DATA_DIR, 'history');
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 if (!fs.existsSync(HISTORY_DIR)) fs.mkdirSync(HISTORY_DIR, { recursive: true });
 
+// main.js의 getYtDlpPath는 app.isPackaged로 "설치된 앱 안의 yt-dlp.exe"를 먼저 보는데,
+// 서버는 항상 맥미니에서 도니까 그 분기가 의미가 없다. 맥용 후보만 순서대로 확인한다.
+let _ytDlpPathCache = null;
+function getYtDlpPath() {
+  if (_ytDlpPathCache) return _ytDlpPathCache;
+  const candidates = [
+    process.env.KMUSIC_YTDLP,
+    '/opt/homebrew/bin/yt-dlp',
+    '/usr/local/bin/yt-dlp',
+    path.join(__dirname, '..', '..', 'bin', 'yt-dlp'),
+    'yt-dlp'
+  ].filter(Boolean);
+  for (const c of candidates) {
+    try {
+      require('child_process').execFileSync(c, ['--version'], { timeout: 5000, stdio: 'ignore' });
+      _ytDlpPathCache = c;
+      return c;
+    } catch {}
+  }
+  _ytDlpPathCache = 'yt-dlp';
+  return _ytDlpPathCache;
+}
+
+function ytdlp(args) {
+  return new Promise((resolve, reject) => {
+    const bin = getYtDlpPath();
+    execFile(bin, args, { timeout: 30000, maxBuffer: 32 * 1024 * 1024 }, (err, stdout, stderr) => {
+      if (err) return reject(new Error(stderr || err.message));
+      resolve(stdout.trim());
+    });
+  });
+}
+
+// 데스크톱은 "지금 PC 앞에 앉은 사람"이 곧 활성 계정이라 getActiveAccount() 하나로 충분하지만,
+// 서버는 여러 기기가 동시에 붙을 수 있어서 요청마다 어느 계정인지 명시해야 한다(로그인 세션에
+// 박힌 accountId). activeAccountId는 서버에서는 아무 의미가 없다.
+function getAccountById(accountId) {
+  const data = loadAccounts();
+  if (!data) return null;
+  return data.accounts.find(a => a.id === accountId) || null;
+}
+
+// ────────────────────────────────────────────────────────────────────────────────
+// 여기부터 main.js에서 그대로 잘라온 구간
+// ────────────────────────────────────────────────────────────────────────────────
+
+// ── [저장소(config/playlists/계정/재생기록 로드·저장)] main.js에서 그대로 옮겨옴 ──────────────────────────
 function loadConfig() {
   try { return JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8')); } catch { return {}; }
 }
@@ -100,6 +157,7 @@ function getActiveAccount() {
   return data.accounts.find(a => a.id === data.activeAccountId) || null;
 }
 
+// ── [가사(lrclib 검색·매칭·캐시)] main.js에서 그대로 옮겨옴 ──────────────────────────
 // ── 가사(lrclib.net) ──────────────────────────────────────────────────────────
 // 유튜브 영상 제목에서 "아티스트 - 곡명" 형태를 최대한 추측해서 뽑아낸다.
 // 괄호 없이 제목 끝에 그냥 붙는 "M/V", "Official Audio" 같은 꼬리표 — 이런 게 남아있으면
@@ -225,33 +283,7 @@ async function getLyrics(ytUrl, title, channel, durationSec) {
   return result;
 }
 
-// yt-dlp binary path
-function getYtDlpPath() {
-  if (app.isPackaged) {
-    return path.join(process.resourcesPath, 'bin', 'yt-dlp.exe');
-  }
-  const candidates = [
-    '/opt/homebrew/bin/yt-dlp',
-    '/usr/local/bin/yt-dlp',
-    path.join(__dirname, 'bin', 'yt-dlp'),
-    'yt-dlp'
-  ];
-  for (const c of candidates) {
-    try { require('child_process').execFileSync(c, ['--version'], { timeout: 5000 }); return c; } catch {}
-  }
-  return 'yt-dlp';
-}
-
-function ytdlp(args) {
-  return new Promise((resolve, reject) => {
-    const bin = getYtDlpPath();
-    execFile(bin, args, { timeout: 30000 }, (err, stdout, stderr) => {
-      if (err) return reject(new Error(stderr || err.message));
-      resolve(stdout.trim());
-    });
-  });
-}
-
+// ── [스트림 정보 + 유튜브 검색] main.js에서 그대로 옮겨옴 ──────────────────────────
 // Get audio stream URL + metadata for a YouTube URL
 // "재생 실패: no supported source" 근본 원인 조사(2026-08-16, 형 신고) — 라이브방송/프리미어성
 // 영상은 yt-dlp가 info.url에 HLS(m3u8) 매니페스트 주소를 돌려주는데, 이건 <audio> 태그가
@@ -348,6 +380,7 @@ async function searchYoutube(query, limit = 10) {
   return picks.slice(0, limit);
 }
 
+// ── [추천 재정렬 엔진(믹스·점수·쿨다운·중복제거·다양성)] main.js에서 그대로 옮겨옴 ──────────────────────────
 // ── 추천 재정렬(개인화 믹스) ────────────────────────────────────────────────────
 // 2026-08-07, 형 요청. 유튜브가 자체 계산하는 "믹스(Mix)" 재생목록(watch?v=<id>&list=RD<id>)을
 // 그대로 가져오되, 순서만 형 계정의 재생기록(채널/곡 단위 집계)으로 다시 매긴다 — 추천 알고리즘을
@@ -656,526 +689,9 @@ function pickDiverseChannels(ranked, need) {
   return picked;
 }
 
-let mainWin = null;
-let settingsWin = null;
-let tabWin = null;
-let tray = null;
-let forceQuit = false;
-
-// Smoothly tweens mainWin's bounds instead of snapping instantly (setBounds()
-// on its own jumps in a single frame). easeOutCubic over ~260ms.
-// Tick rate deliberately throttled below display refresh rate (~25ms/40fps
-// instead of 16ms/60fps): each native SetWindowPos on Windows forces a real
-// repaint of the whole page, and issuing them faster than Chromium can paint
-// causes the previous frame's pixels to still be on screen when the next
-// bounds change lands — visible as trailing/ghosting. Giving each step more
-// real time to fully paint before the next one arrives reduces that, even
-// though each individual jump is a bit larger.
-let boundsAnimTimer = null;
-function animateBounds(from, to, duration = 260) {
-  if (boundsAnimTimer) { clearInterval(boundsAnimTimer); boundsAnimTimer = null; }
-  const start = Date.now();
-  const ease = t => 1 - Math.pow(1 - t, 3);
-  boundsAnimTimer = setInterval(() => {
-    if (!mainWin || mainWin.isDestroyed()) { clearInterval(boundsAnimTimer); boundsAnimTimer = null; return; }
-    const t = Math.min(1, (Date.now() - start) / duration);
-    const e = ease(t);
-    mainWin.setBounds({
-      x: Math.round(from.x + (to.x - from.x) * e),
-      y: Math.round(from.y + (to.y - from.y) * e),
-      width: Math.round(from.width + (to.width - from.width) * e),
-      height: Math.round(from.height + (to.height - from.height) * e)
-    });
-    if (t >= 1) { clearInterval(boundsAnimTimer); boundsAnimTimer = null; }
-  }, 25);
-}
-
-function getTrayIcon() {
-  const trayIconPath = path.join(__dirname, 'assets', 'icon_tray.png');
-  if (fs.existsSync(trayIconPath)) {
-    return nativeImage.createFromPath(trayIconPath);
-  }
-  const iconPath = path.join(__dirname, 'assets', 'icon.png');
-  if (fs.existsSync(iconPath)) {
-    const img = nativeImage.createFromPath(iconPath).resize({ width: 16, height: 16 });
-    return img;
-  }
-  return nativeImage.createEmpty();
-}
-
-function createTray() {
-  tray = new Tray(getTrayIcon());
-  tray.setToolTip('K-Music Player');
-  const menu = Menu.buildFromTemplate([
-    { label: '열기', click: () => { mainWin?.show(); mainWin?.focus(); moveTabBeside(); } },
-    { type: 'separator' },
-    { label: '설정', click: () => { mainWin?.show(); mainWin?.focus(); moveTabBeside(); mainWin?.webContents.send('open-settings'); } },
-    { label: '프로그램 정보', click: () => { mainWin?.show(); mainWin?.focus(); moveTabBeside(); mainWin?.webContents.send('open-about'); } },
-    { type: 'separator' },
-    { label: '프로그램 종료', click: () => { forceQuit = true; app.quit(); } }
-  ]);
-  tray.setContextMenu(menu);
-  tray.on('double-click', () => { mainWin?.show(); mainWin?.focus(); moveTabBeside(); });
-  tray.on('click', () => { mainWin?.show(); mainWin?.focus(); moveTabBeside(); });
-}
-
-// ── 화면 옆 엣지탭 (창 왼쪽 도킹 기본값 기준, 창 오른쪽 가장자리에 붙는 탭) ──────────
-const TAB_W = 26, TAB_H = 104;
-
-const MAIN_MIN_HEIGHT = 884; // createMainWindow()의 minHeight와 동일
-
-// 라벨을 위아래로 드래그해서 옮길 수 있는 범위 — 지금 창 높이가 얼마든 상관없이,
-// 창을 최소 높이로 줄였을 때도 라벨이 창 밖으로 벗어나지 않도록 그 기준으로 제한.
-function clampTabOffset(offset) {
-  const maxOffset = Math.max(0, (MAIN_MIN_HEIGHT - TAB_H) / 2);
-  return Math.max(-maxOffset, Math.min(maxOffset, offset));
-}
-
-function getTabPos(offsetOverride) {
-  const wa = screen.getPrimaryDisplay().workArea;
-  const offset = clampTabOffset(offsetOverride != null ? offsetOverride : (loadConfig().tabOffsetY || 0));
-  const b = mainWin && !mainWin.isDestroyed() ? mainWin.getBounds() : null;
-  let x;
-  if (mainWin && !mainWin.isDestroyed() && mainWin.isVisible()) {
-    x = b.x + b.width;
-  } else {
-    x = wa.x; // 창이 숨겨지면 화면 실제 가장자리로 바짝 붙음
-  }
-  const winY = b ? b.y : wa.y;
-  const winHeight = b ? b.height : MAIN_MIN_HEIGHT;
-  const y = Math.round(winY + winHeight / 2 - TAB_H / 2 + offset);
-  return { x, y };
-}
-
-function createTabWindow() {
-  const { x, y } = getTabPos();
-  tabWin = new BrowserWindow({
-    x, y, width: TAB_W, height: TAB_H,
-    frame: false, transparent: true, backgroundColor: '#00000000',
-    focusable: false,
-    // 항상위 여부는 mainWin과 항상 같은 값으로 맞춤 — 안 그러면 mainWin이 항상위가 아닐 때
-    // 다른 창에 포커스가 가서 mainWin은 뒤로 숨어도 탭만 계속 맨 위에 떠서 따로 노는 것처럼 보임.
-    alwaysOnTop: !!loadConfig().alwaysOnTop, skipTaskbar: true, resizable: false,
-    webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
-      contextIsolation: true, nodeIntegration: false,
-    }
-  });
-  tabWin.loadFile('renderer/tab.html');
-  tabWin.setVisibleOnAllWorkspaces(true);
-  tabWin.webContents.once('did-finish-load', () => {
-    tabWin?.webContents.send('set-theme', loadConfig().theme || 'default');
-  });
-}
-
-function moveTabBeside(offsetOverride) {
-  if (!tabWin || tabWin.isDestroyed()) return;
-  const { x, y } = getTabPos(offsetOverride);
-  tabWin.setPosition(x, y);
-}
-
-let tabDragStartOffset = null;
-ipcMain.handle('tab-drag-start', () => {
-  tabDragStartOffset = loadConfig().tabOffsetY || 0;
-});
-ipcMain.handle('tab-drag-move', (_, dy) => {
-  if (tabDragStartOffset == null) return;
-  moveTabBeside(tabDragStartOffset + (dy || 0));
-});
-ipcMain.handle('tab-drag-end', (_, dy) => {
-  if (tabDragStartOffset == null) return;
-  const finalOffset = clampTabOffset(tabDragStartOffset + (dy || 0));
-  saveConfig({ ...loadConfig(), tabOffsetY: finalOffset });
-  tabDragStartOffset = null;
-  moveTabBeside(finalOffset);
-});
-
-ipcMain.handle('toggle-main-window', () => {
-  if (mainWin?.isVisible()) {
-    mainWin.hide();
-  } else {
-    mainWin?.show();
-    mainWin?.focus();
-  }
-  moveTabBeside();
-  return true;
-});
-
-function createMainWindow() {
-  const cfg0 = loadConfig();
-  const savedHeight = cfg0.windowHeight;
-  const maxUsableHeight = screen.getPrimaryDisplay().workAreaSize.height;
-  const validSaved = typeof savedHeight === 'number' && savedHeight >= 884 && savedHeight <= maxUsableHeight;
-
-  // 종료 시점 위치 복원 — 그 사이 모니터 구성이 바뀌어 화면 밖으로 나갈 좌표면 무시하고 기본(가운데) 위치 사용.
-  const savedX = cfg0.windowX, savedY = cfg0.windowY;
-  let posOpts = {};
-  if (typeof savedX === 'number' && typeof savedY === 'number') {
-    const onScreen = screen.getAllDisplays().some(d => (
-      savedX >= d.bounds.x - 50 && savedX < d.bounds.x + d.bounds.width &&
-      savedY >= d.bounds.y - 50 && savedY < d.bounds.y + d.bounds.height
-    ));
-    if (onScreen) posOpts = { x: savedX, y: savedY };
-  }
-
-  mainWin = new BrowserWindow({
-    width: 400,
-    height: validSaved ? savedHeight : 884,
-    ...posOpts,
-    minHeight: 884,
-    minWidth: 400,
-    maxWidth: 400,
-    resizable: true,
-    maximizable: false,
-    frame: false,
-    skipTaskbar: false,
-    webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
-      contextIsolation: true,
-      nodeIntegration: false
-    }
-  });
-  mainWin.loadFile('renderer/index.html');
-
-  // ── "Fill height" double-click toggle ────────────────────────────────────────
-  // We drive this feature ENTIRELY from our own double-click detection in the
-  // renderer (renderer/app.js sends 'toggle-fill-height' over IPC) plus a plain
-  // setBounds() here — never native OS maximize. `maximizable: false` above stops
-  // Windows from ALSO trying to run its own SC_MAXIMIZE on the same double-click;
-  // without it, the native maximize attempt and our own setBounds() raced each
-  // other (the OS's own unmaximize/restore was clobbering our fill immediately
-  // after we applied it — the "fills then instantly reverts" symptom).
-
-  // filled = are we currently in the "filled to work-area height" state.
-  // preFillBounds = the exact bounds to restore to when toggling back off.
-  let filled = false;
-  let preFillBounds = null;
-  let dragUnsnapTimer = null;
-  const toggleFillHeight = () => {
-    if (!mainWin || mainWin.isDestroyed()) return;
-    if (dragUnsnapTimer) { clearTimeout(dragUnsnapTimer); dragUnsnapTimer = null; }
-    if (mainWin.isMaximized()) mainWin.unmaximize(); // paranoia; should never be true
-    if (!filled) {
-      // Fill branch: remember where we are, then snap to the LEFT edge of
-      // whichever monitor the window currently sits on and grow to that
-      // display's full work-area height. width stays 400. workArea excludes
-      // the taskbar on whichever edge/monitor it's docked.
-      const cur = mainWin.getBounds();
-      const wa = screen.getDisplayMatching(cur).workArea;
-      preFillBounds = cur;
-      filled = true;
-      // 채움 상태에선 move/resize 핸들러가 저장을 건너뛰므로, 채우기 직전의 "일반" 위치/높이를
-      // 여기서 한 번 명시적으로 저장해둠 — 채운 채로 종료해도 다음 실행 때 채운 상태로 복원 가능.
-      saveConfig({ ...loadConfig(), windowFilled: true, windowX: cur.x, windowY: cur.y, windowHeight: cur.height });
-      animateBounds(cur, { x: wa.x, y: wa.y, width: 400, height: wa.height });
-    } else {
-      // Restore branch: go back to exactly where we were before filling.
-      const cur = mainWin.getBounds();
-      const restoreTo = preFillBounds || cur;
-      preFillBounds = null;
-      filled = false;
-      saveConfig({ ...loadConfig(), windowFilled: false, windowX: restoreTo.x, windowY: restoreTo.y, windowHeight: restoreTo.height });
-      animateBounds(cur, restoreTo);
-    }
-  };
-
-  if (cfg0.windowFilled) toggleFillHeight();
-  ipcMain.handle('toggle-fill-height', () => { toggleFillHeight(); });
-
-  // If the user drags the window away while it's filled (instead of
-  // double-clicking to restore), treat that like Windows' own "unsnap":
-  // shrink back to the pre-fill height right where the drag left it, forget the
-  // old remembered spot, and let wherever it lands become the new "normal"
-  // position. Next double-click then does a fresh fill from there.
-  //
-  // ⚠️ CRITICAL — why we WAIT for the drag to stop instead of resizing on the
-  // first 'move' tick (2026-07-25, fixes the "flashes + jumps to left edge
-  // first" bug on real Windows hardware):
-  //   Dragging the -webkit-app-region:drag header is a NATIVE Windows title-bar
-  //   (HTCAPTION) drag. For the whole time the mouse button is held, Windows runs
-  //   its OWN modal move loop that OWNS the window rectangle: every mouse move it
-  //   recomputes the window origin from a grab-offset it cached at mouse-down and
-  //   drives the window with its own SetWindowPos. If WE call setBounds() in the
-  //   middle of that loop (which is exactly what a 'move'-triggered resize does —
-  //   'move' fires from WM_MOVE, i.e. mid-drag), two writers fight over the same
-  //   rect within one drag: the OS loop's cached anchor no longer matches the
-  //   window we just resized, so it yanks toward its stale reference (the visible
-  //   left-edge snap) and the back-and-forth reconciliation shows up as flicker.
-  //   So we DON'T touch bounds while movement is happening. We only (re)arm a short
-  //   timer on every 'move'; a real drag emits a continuous stream, so the timer
-  //   keeps resetting and never fires mid-motion. It only fires once movement goes
-  //   quiet — mouse released, OR held still — and at THAT moment the OS move loop
-  //   is idle, so a single setBounds() lands cleanly with no fight, no flicker, and
-  //   no detour to the left edge. Height-only shrink with x/y preserved also keeps
-  //   the OS grab-offset (cursor→top-left) valid if the user resumes after a pause.
-  // 항상위가 아닐 때는 tabWin도 항상위가 아니라서, 작업표시줄 클릭 등으로 mainWin이
-  // 다시 앞으로 나올 때 탭도 즉시 같이 따라와야 함 — 3초 주기 moveTop() 타이머만 믿으면
-  // 최대 3초까지 탭이 뒤에 남아있다가 뒤늦게 튀어나오는 것처럼 보임.
-  mainWin.on('show', () => { tabWin?.moveTop(); moveTabBeside(); });
-  mainWin.on('focus', () => { tabWin?.moveTop(); moveTabBeside(); });
-  mainWin.on('restore', () => { tabWin?.moveTop(); moveTabBeside(); });
-
-  let moveSaveTimer = null;
-  mainWin.on('move', () => {
-    moveTabBeside();
-
-    // 창 위치 저장(디바운스) — 다음 실행 때 마지막 위치로 복원하기 위함. 채움 상태의
-    // 임시 좌표나 우리 자체 애니메이션 중간값은 저장하지 않음(windowHeight 저장 로직과 동일 원칙).
-    if (!boundsAnimTimer && !filled) {
-      clearTimeout(moveSaveTimer);
-      moveSaveTimer = setTimeout(() => {
-        if (!mainWin || mainWin.isDestroyed() || filled) return;
-        const [x, y] = mainWin.getPosition();
-        saveConfig({ ...loadConfig(), windowX: x, windowY: y });
-      }, 400);
-    }
-
-    if (boundsAnimTimer) return; // our own animateBounds() is driving this move, ignore
-    if (!filled) return;
-    const targetHeight = preFillBounds ? preFillBounds.height : mainWin.getBounds().height;
-    if (dragUnsnapTimer) clearTimeout(dragUnsnapTimer);
-    dragUnsnapTimer = setTimeout(() => {
-      dragUnsnapTimer = null;
-      if (!mainWin || mainWin.isDestroyed()) return;
-      if (boundsAnimTimer) return; // an animation started in the meantime; let it own the bounds
-      if (!filled) return;         // toggled off some other way in the meantime
-      filled = false;
-      preFillBounds = null;
-      const cur = mainWin.getBounds();
-      // 더블클릭 원복 경로(toggleFillHeight)엔 이 저장이 있었는데 드래그로 풀리는 이 경로엔
-      // 빠져있었음 — 채운 채로 종료 안 해도 windowFilled가 true로 남아 다음 실행 때 다시
-      // 채워진 채로 뜨던 버그(오푸스 리뷰 발견, 2026-08-02).
-      saveConfig({ ...loadConfig(), windowFilled: false, windowX: cur.x, windowY: cur.y, windowHeight: targetHeight });
-      mainWin.setBounds({ x: cur.x, y: cur.y, width: 400, height: targetHeight });
-    }, 140);
-  });
-
-  let resizeSaveTimer = null;
-  mainWin.on('resize', () => {
-    // 아래쪽 모서리로만 높이를 조절하면 x/y는 안 바뀌어서 'move' 이벤트가 안 뜨고, 그래서
-    // 엣지탭이 안 따라오고 예전 자리에 남아있던 버그(오푸스 리뷰 발견, 2026-08-02) — resize
-    // 때도 위치를 다시 계산해야 함.
-    moveTabBeside();
-    if (filled) return; // don't persist the temporary filled height
-    clearTimeout(resizeSaveTimer);
-    resizeSaveTimer = setTimeout(() => {
-      if (filled) return;
-      const [, h] = mainWin.getSize();
-      saveConfig({ ...loadConfig(), windowHeight: h });
-    }, 400);
-  });
-
-  mainWin.on('close', e => {
-    if (!forceQuit) {
-      e.preventDefault();
-      mainWin.hide();
-      moveTabBeside();
-    }
-  });
-}
-
-const gotLock = app.requestSingleInstanceLock();
-if (!gotLock) {
-  app.quit();
-} else {
-  app.on('second-instance', () => {
-    if (mainWin) {
-      if (mainWin.isMinimized()) mainWin.restore();
-      mainWin.show();
-      mainWin.focus();
-    }
-  });
-  app.whenReady().then(() => {
-    createMainWindow();
-    createTray();
-    createTabWindow();
-    setInterval(() => {
-      if (tabWin && !tabWin.isDestroyed()) tabWin.moveTop();
-      // 윈도우 자체 화면 캡처 도구 등 외부 요인이 mainWin의 항상위 상태를 우리 모르게 풀어버리는
-      // 경우가 있어서(형 리포트 2026-08-02 — 캡처 후 라벨만 떠있고 앱은 다른 창 밑으로 감), tabWin과
-      // 같은 방식으로 주기적으로 재확인해서 어긋나 있으면 다시 맞춰준다.
-      if (mainWin && !mainWin.isDestroyed() && loadConfig().alwaysOnTop && !mainWin.isAlwaysOnTop()) {
-        mainWin.setAlwaysOnTop(true);
-      }
-    }, 3000);
-    if (app.isPackaged) {
-      // allowPrerelease=false 없으면 테스트빌드(버전 -N 접미사)가 자동으로 allowPrerelease=true가
-      // 되고, 그 상태에서는 GitHubProvider가 정식(비프리릴리즈) 릴리즈를 찾지 못해 "업데이트 확인"이
-      // 영구 실패한다(K-Tube 2026-08-06 실측, check_electron_autoupdate_safeguard.py 훅 근거).
-      // 반대로 이 값을 켜두고 시작 시 자동확인까지 그대로 두면, 테스트빌드가 이미 배포된 정식판을
-      // "새 버전"으로 착각해서 자동으로 덮어써버리는 사고가 K-Memo에서 실제로 났었다(2026-08-07,
-      // 1.4.2-1이 앱 켜자마자 1.4.2로 자동 다운그레이드됨) — 그래서 시작 시 자동확인은 테스트빌드일
-      // 때만 건너뛰고, 수동 "업데이트 확인" 버튼은 그대로 둔다.
-      autoUpdater.allowPrerelease = false;
-      const isTestBuild = /-\d+$/.test(app.getVersion());
-      if (isTestBuild) {
-        console.log('[autoUpdater] 테스트빌드(' + app.getVersion() + ') — 시작 시 자동 업데이트 확인 건너뜀');
-      } else {
-        autoUpdater.checkForUpdatesAndNotify();
-      }
-    }
-  });
-}
-
-autoUpdater.on('update-available', () => {
-  mainWin?.webContents.send('update-available');
-});
-autoUpdater.on('update-downloaded', () => {
-  mainWin?.webContents.send('update-downloaded');
-});
-autoUpdater.on('update-not-available', () => {
-  mainWin?.webContents.send('update-not-available');
-});
-autoUpdater.on('error', (err) => {
-  mainWin?.webContents.send('update-error', err?.message || String(err));
-});
-ipcMain.handle('install-update', () => autoUpdater.quitAndInstall());
-ipcMain.handle('get-app-version', () => app.getVersion());
-ipcMain.handle('check-for-updates', () => {
-  if (!app.isPackaged) return 'dev';
-  autoUpdater.checkForUpdates();
-  return 'checking';
-});
-app.on('window-all-closed', () => { if (forceQuit) app.quit(); });
-
-// ── IPC ──────────────────────────────────────────────────────────────────────
-
-ipcMain.handle('get-config', () => loadConfig());
-// https만 허용 — 렌더러가 임의로 file:// 등 다른 스킴을 열게 하는 걸 막기 위한 최소한의 가드
-ipcMain.handle('open-external', (_, url) => {
-  if (typeof url === 'string' && /^https:\/\//.test(url)) shell.openExternal(url);
-});
-
-// 설정 화면 "확인" 버튼용 — 저장 여부와 무관하게 지금 입력창에 있는 값을 바로 테스트한다.
-// 아무 유효한 영상 id 하나(dQw4w9WgXcQ)로 videos.list를 호출해서, 키가 유효하면 200으로
-// 응답이 오고(그 영상이 실제로 존재하는지는 중요하지 않음) 무효면 400이 온다는 점만 이용
-// — 형이 "저장 눌러야만 확인되는 게 불편하다"고 지적해서 추가(2026-08-08).
-ipcMain.handle('test-yt-api-key', async (_, apiKey) => {
-  try {
-    const viewCounts = await fetchViewCounts(['dQw4w9WgXcQ'], apiKey);
-    return { ok: Object.keys(viewCounts).length > 0 };
-  } catch (e) {
-    return { ok: false, error: e.message };
-  }
-});
-ipcMain.handle('save-config', (_, cfg) => {
-  const prev = loadConfig();
-  // 렌더러는 앱 시작 시 한 번 읽은 config 사본을 계속 들고 있다가 매번 통째로 다시 보냄(재생위치
-  // 자동저장 등). tabOffsetY/windowX/windowY/windowHeight/windowFilled는 메인 프로세스(탭 드래그·
-  // 창 이동/크기/채움토글)만 갱신하는 값이라 렌더러의 낡은 사본으로 덮어써지면 안 됨 — 항상 최신
-  // (prev) 값을 유지. (windowFilled 누락으로 재생 중 5초 자동저장이 채움상태를 계속 되돌리던
-  // 버그를 오푸스 리뷰에서 발견, 2026-08-02)
-  const { tabOffsetY, windowX, windowY, windowHeight, windowFilled, ...rendererCfg } = cfg;
-  saveConfig({
-    ...prev, ...rendererCfg,
-    tabOffsetY: prev.tabOffsetY, windowX: prev.windowX, windowY: prev.windowY, windowHeight: prev.windowHeight,
-    windowFilled: prev.windowFilled
-  });
-  if (cfg.theme) tabWin?.webContents.send('set-theme', cfg.theme);
-  return true;
-});
-ipcMain.handle('get-playlists', () => loadPlaylists());
-ipcMain.handle('save-playlists', (_, pl) => { savePlaylists(pl); return true; });
-
-// ── 계정 IPC ───────────────────────────────────────────────────────────────────
-ipcMain.handle('account-get-active', () => {
-  const account = getActiveAccount();
-  if (!account) return null;
-  // pinHash는 렌더러로 절대 내보내지 않는다
-  const { pinHash, ...safe } = account;
-  return safe;
-});
-
-ipcMain.handle('account-register', (_, name, pin) => {
-  name = String(name || '').trim().slice(0, 12);
-  pin = String(pin || '');
-  if (!name) return { ok: false, error: '이름을 입력해 주세요.' };
-  if (!/^[0-9]{4,6}$/.test(pin)) return { ok: false, error: '간편 비밀번호는 숫자 4~6자리예요.' };
-
-  let data = loadAccounts();
-  if (!data) data = { schemaVersion: 1, activeAccountId: null, accounts: [] };
-  const now = new Date().toISOString();
-  const id = uid();
-  const account = {
-    id, name, pinHash: hashPin(pin),
-    pinSetAt: now, createdAt: now, lastActiveAt: now,
-    prefs: { personalizeRecommendations: true, requirePinOnLaunch: false }
-  };
-  data.accounts.push(account);
-  data.activeAccountId = id;
-  saveAccounts(data);
-  saveHistory({ schemaVersion: 1, accountId: id, updatedAt: now, tracks: {}, channels: {}, artists: {}, decades: {}, mixSeeds: {} });
-
-  const { pinHash, ...safe } = account;
-  return { ok: true, account: safe };
-});
-
-ipcMain.handle('account-change-name', (_, newName) => {
-  newName = String(newName || '').trim().slice(0, 12);
-  if (!newName) return { ok: false, error: '이름을 입력해 주세요.' };
-  const data = loadAccounts();
-  const account = data && data.accounts.find(a => a.id === data.activeAccountId);
-  if (!account) return { ok: false, error: '등록된 계정이 없어요.' };
-  account.name = newName;
-  saveAccounts(data);
-  return { ok: true };
-});
-
-// resetMode가 true면 currentPin 검증을 건너뛴다("비밀번호를 잊으셨나요? 초기화" 경로 —
-// 로컬 전용 앱이라 이메일 인증 같은 진짜 복구 수단이 없고, 4~6자리 PIN 자체가 애초에
-// "같은 PC 다른 사람과 안 섞이기" 수준의 칸막이라 신원확인 없는 초기화도 설계상 허용함)
-ipcMain.handle('account-change-pin', (_, currentPin, newPin, resetMode) => {
-  newPin = String(newPin || '');
-  if (!/^[0-9]{4,6}$/.test(newPin)) return { ok: false, error: '새 비밀번호는 숫자 4~6자리예요.' };
-  const data = loadAccounts();
-  const account = data && data.accounts.find(a => a.id === data.activeAccountId);
-  if (!account) return { ok: false, error: '등록된 계정이 없어요.' };
-  if (!resetMode && !verifyPin(String(currentPin || ''), account.pinHash)) {
-    return { ok: false, error: '현재 비밀번호가 맞지 않아요.' };
-  }
-  account.pinHash = hashPin(newPin);
-  account.pinSetAt = new Date().toISOString();
-  saveAccounts(data);
-  return { ok: true };
-});
-
-ipcMain.handle('account-set-personalize', (_, on) => {
-  const data = loadAccounts();
-  const account = data && data.accounts.find(a => a.id === data.activeAccountId);
-  if (!account) return false;
-  account.prefs.personalizeRecommendations = !!on;
-  saveAccounts(data);
-  return true;
-});
-
-// 특정 채널을 추천에서 완전히 제외한다(-Infinity 처리는 scoreCandidate에 있음) — 형이
-// 의도하지 않았는데 알고리즘이 계속 같은 채널만 재생시켜서 그 재생기록이 다시 취향 점수로
-// 쌓이는 눈덩이 현상을 형이 직접 끊을 수 있게 하는 수동 제어 장치(형 요청, 2026-08-08).
-ipcMain.handle('toggle-channel-block', (_, channel) => {
-  channel = String(channel || '').trim();
-  const account = getActiveAccount();
-  if (!account || !channel) return null;
-  const history = loadHistory(account.id);
-  history.channels[channel] ||= { playCount: 0, skipCount: 0, favoriteCount: 0 };
-  const next = !history.channels[channel].blocked;
-  history.channels[channel].blocked = next;
-  saveHistory(history);
-  return next;
-});
-
-ipcMain.handle('get-blocked-channels', () => {
-  const account = getActiveAccount();
-  if (!account) return [];
-  const history = loadHistory(account.id);
-  return Object.keys(history.channels || {}).filter(ch => history.channels[ch]?.blocked);
-});
-
-// ── 추천 IPC ───────────────────────────────────────────────────────────────────
-// excludeItems: [{ id, title, duration }] — 재생목록에 이미 올라와 있는 곡들(과거+현재+미래 전부).
-// 예전엔 id 배열만 받았는데, 같은 노래의 다른 업로드(다른 id)까지 걸러내려면 제목/길이가
-// 필요해서 객체 배열로 바꿨다(2026-08-08).
-ipcMain.handle('get-recommendations', async (_, seedYtUrl, excludeItems, count) => {
-  const account = getActiveAccount();
+// ── [추천 IPC 본문 → getRecommendations()] main.js에서 그대로 옮겨옴 ──────────────────────────
+async function getRecommendations(accountId, seedYtUrl, excludeItems, count) {
+  const account = getAccountById(accountId);
   if (!account) return [];
   const seedId = extractVideoId(seedYtUrl);
   if (!seedId) return [];
@@ -1214,11 +730,11 @@ ipcMain.handle('get-recommendations', async (_, seedYtUrl, excludeItems, count) 
   } catch {
     return []; // 네트워크 실패 등은 조용히 빈 목록 — 추천 실패로 재생 자체가 막히면 안 됨
   }
-});
+}
 
-// eventType: 'play' | 'complete' | 'skip'. meta: { title, channel, duration, listenedSec?, releaseYear? }
-ipcMain.handle('record-play-event', (_, ytUrl, meta, eventType) => {
-  const account = getActiveAccount();
+// ── [재생기록 IPC 본문 → recordPlayEvent()] main.js에서 그대로 옮겨옴 ──────────────────────────
+function recordPlayEvent(accountId, ytUrl, meta, eventType) {
+  const account = getAccountById(accountId);
   if (!account) return false;
   const vid = extractVideoId(ytUrl);
   if (!vid) return false;
@@ -1283,126 +799,32 @@ ipcMain.handle('record-play-event', (_, ytUrl, meta, eventType) => {
   history.updatedAt = now;
   saveHistory(history);
   return true;
-});
+}
 
-ipcMain.handle('get-stream', async (_, ytUrl, quality) => {
-  try {
-    // 음질 설정 UI를 없앤 뒤(2026-08-16, 유튜브가 애초에 129kbps 이상 오디오를 안 줘서
-    // 320k가 죽어있던 설정이었음)에도 config.json에 예전에 저장된 quality 값(특히 128)이
-    // 남아있으면 계속 최저음질에 고정되는 채로 UI로는 바꿀 방법이 없어지는 문제가 있었다
-    // (오푸스 검토, 2026-08-16). 저장된 값을 더는 참조하지 않고 항상 고정 기본값만 쓴다.
-    return await getStreamInfo(ytUrl, quality || '192');
-  } catch (e) {
-    return { error: e.message, code: e.code };
-  }
-});
-
-ipcMain.handle('search', async (_, query) => {
-  try {
-    return await searchYoutube(query);
-  } catch (e) {
-    return { error: e.message };
-  }
-});
-
-ipcMain.handle('get-video-info', async (_, ytUrl) => {
-  try {
-    const json = await ytdlp(['--dump-json', '--no-playlist', '--no-warnings', '--skip-download', ytUrl]);
-    const d = JSON.parse(json);
-    return {
-      ytUrl,
-      title: d.title,
-      channel: d.uploader || d.channel || '',
-      thumbnail: d.thumbnail,
-      duration: d.duration,
-      releaseYear: d.release_year || null // 2026-08-07 추천 개인화의 "시대별" 신호용
-    };
-  } catch (e) {
-    return { error: e.message };
-  }
-});
-
-ipcMain.handle('open-settings', () => {
-  if (settingsWin && !settingsWin.isDestroyed()) { settingsWin.focus(); return; }
-  settingsWin = new BrowserWindow({
-    width: 360,
-    height: 420,
-    resizable: false,
-    frame: false,
-    parent: mainWin,
-    modal: true,
-    webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
-      contextIsolation: true,
-      nodeIntegration: false
-    }
-  });
-  settingsWin.loadFile('renderer/settings.html');
-});
-
-ipcMain.handle('close-settings', () => {
-  settingsWin?.close();
-  settingsWin = null;
-  mainWin?.webContents.send('settings-closed');
-});
-
-ipcMain.handle('minimize', () => mainWin?.minimize());
-ipcMain.handle('close-app', () => { mainWin?.hide(); moveTabBeside(); });
-ipcMain.handle('copy-text', (_, text) => { clipboard.writeText(String(text || '')); return true; });
-ipcMain.handle('toggle-always-on-top', () => {
-  const next = !mainWin?.isAlwaysOnTop();
-  mainWin?.setAlwaysOnTop(next);
-  tabWin?.setAlwaysOnTop(next);
-  return next;
-});
-ipcMain.handle('get-always-on-top', () => mainWin?.isAlwaysOnTop() ?? false);
-ipcMain.handle('set-always-on-top', (_, val) => { mainWin?.setAlwaysOnTop(val); tabWin?.setAlwaysOnTop(val); });
-ipcMain.handle('get-login-item', () => app.getLoginItemSettings().openAtLogin);
-ipcMain.handle('set-login-item', (_, val) => {
-  app.setLoginItemSettings({ openAtLogin: val, path: app.getPath('exe') });
-});
-ipcMain.handle('quit-app', () => { forceQuit = true; app.quit(); });
-ipcMain.handle('get-lyrics', async (_, ytUrl, title, channel, durationSec) => {
-  try {
-    return await getLyrics(ytUrl, title, channel, durationSec);
-  } catch (e) {
-    return { found: false, error: e.message };
-  }
-});
-
-// 동기화 데이터가 없는 곡에서 형이 직접 한 줄 탭해서 맞춘 타이밍을 저장 — 같은 곡 다음에
-// 틀 때도 자동으로 그 타이밍을 그대로 써먹기 위함(2026-07-20, 김범수 "끝사랑" 등 lrclib에
-// 동기화 자체가 없는 곡 대응).
-ipcMain.handle('save-manual-sync', async (_, ytUrl, syncLines) => {
-  const cache = loadLyricsCache();
-  if (cache[ytUrl]) {
-    cache[ytUrl].manualSyncLines = syncLines;
-    saveLyricsCache(cache);
-  }
-  return true;
-});
-
-ipcMain.handle('search-lyrics-manual', async (_, ytUrl, artist, title, durationSec) => {
-  try {
-    const found = await fetchLyricsFromLrclib(artist, title, durationSec);
-    const result = found
-      ? { found: true, synced: found.synced, plain: found.plain, artist, title }
-      : { found: false, artist, title };
-    result._v = LYRICS_MATCHER_VERSION;
-    const cache = loadLyricsCache();
-    cache[ytUrl] = result;
-    saveLyricsCache(cache);
-    return result;
-  } catch (e) {
-    return { found: false, error: e.message };
-  }
-});
-
-ipcMain.handle('check-ytdlp', async () => {
-  try {
-    const v = await ytdlp(['--version']);
-    return { ok: true, version: v };
-  } catch {
-    return { ok: false };
-  }
-});
+// ────────────────────────────────────────────────────────────────────────────────
+// 잘라온 구간 끝 — 아래는 생성기가 붙이는 export 목록
+// ────────────────────────────────────────────────────────────────────────────────
+module.exports = {
+  DATA_DIR,
+  // 저장소
+  loadConfig, saveConfig,
+  loadPlaylists, savePlaylists,
+  loadLyricsCache, saveLyricsCache,
+  writeJsonAtomic,
+  uid, hashPin, verifyPin,
+  loadAccounts, saveAccounts,
+  loadHistory, saveHistory, getActiveAccount, getAccountById,
+  // 가사
+  LYRICS_MATCHER_VERSION, parseArtistTitle, fetchLyricsFromLrclib, getLyrics,
+  // yt-dlp
+  getYtDlpPath, ytdlp, getStreamInfo, searchYoutube, AUDIO_FORMAT,
+  // 추천 엔진
+  extractVideoId, getMixForVideo, enrichItem,
+  scoreCandidate, cooldownPenalty, reorderByHistory,
+  fetchViewCounts, popularityScore, buildMaxLogByDecade,
+  looksLikeSameSong, dedupeSimilarSongs, excludesAsSongList,
+  findOverused, partitionOverused, pickDiverseChannels,
+  MIX_EXCLUDE_RE, BROADCAST_CHANNEL_RE, LIVE_BROADCAST_RE,
+  // main.js의 IPC 핸들러 본문을 그대로 함수로 만든 것
+  getRecommendations, recordPlayEvent
+};

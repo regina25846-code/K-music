@@ -764,6 +764,84 @@ body.lyrics-mode .lyr-preview { display: flex; }
 }
 .srow-ctrl input[type="password"]::placeholder, .srow-ctrl input[type="text"]::placeholder { color: var(--text3); }
 
+/* ── 커스텀 드롭다운(.ksel) ─────────────────────────────────────────────────────
+ * 네이티브 <select>는 닫힌 상태만 CSS로 꾸밀 수 있고, 펼친 목록은 OS가 자기 방식대로
+ * 그린다. 폰에서는 아예 화면 아래에서 회색 휠/라디오 목록이 올라와서 앱 디자인과 전혀
+ * 안 맞았다(2026-08-17 폴드7 실기에서 형이 발견). 데스크톱도 같은 이유로 목록만
+ * 윈도우 기본 흰 상자였는데, 창이 작아 덜 티가 났을 뿐이다.
+ *
+ * 그래서 목록을 직접 그린다. <select>는 지우지 않고 그대로 두고(값의 원본은 계속 select),
+ * app.js가 만든 .ksel 껍데기 안에서만 감춘다 — 스크립트가 안 돌면 네이티브 select가
+ * 그대로 보이고 그대로 동작한다(기능이 사라지지 않는 안전장치). */
+.ksel { position: relative; display: inline-block; }
+.ksel .ksel-native {
+  /* display:none이 아니라 "보이지만 않게" — 폼 값과 접근성 트리에서 사라지지 않게 한다 */
+  position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; margin: -1px;
+}
+.ksel-btn {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  background: linear-gradient(180deg, var(--surf-hi), var(--surf-lo)); border: none; border-radius: 6px;
+  box-shadow: inset 0 1px 0 var(--sheen-hi), inset 0 -1px 2px var(--sheen-lo), 0 1px 2px rgba(0,0,0,0.15);
+  padding: 8px 10px 8px 12px; font-size: 12px; outline: none; cursor: pointer;
+  min-width: 132px; font-family: var(--mono); color: var(--readout);
+  transition: filter 0.15s, box-shadow 0.15s;
+}
+.ksel-btn:hover { filter: brightness(1.1); }
+.ksel-btn:focus-visible, .ksel-btn.open {
+  box-shadow: inset 0 1px 0 var(--sheen-hi), inset 0 -1px 2px var(--sheen-lo), 0 0 0 2px var(--prog);
+}
+.ksel-caret { flex-shrink: 0; opacity: 0.65; transition: transform 0.18s ease; }
+.ksel-btn.open .ksel-caret { transform: rotate(180deg); }
+
+/* 목록은 body 바로 아래에 position:fixed로 붙인다. 설정 패널이 overflow:auto라
+ * 그 안에 두면 잘리고 같이 스크롤된다. z-index는 설정 오버레이(200)보다 위.
+ *
+ * ⚠️ 배경을 --surf-hi/--surf(놋쇠 손잡이용 변수)로 칠하면 안 된다. 그 두 변수는 토글·다이얼
+ * 같은 "작고 반짝이는 부품" 전용이라 빈티지 스킨에서는 본문보다 훨씬 밝은 금색/은색이다.
+ * 반면 글자색 변수(--text2/--prog)는 --bg/--panel 위에서 읽히도록 맞춰져 있어서, 둘을 겹치면
+ * 미드나잇에서 밝은 금색 배경 위에 옅은 갈색 글자(대비 1.5:1)가 되어 사실상 안 보였다
+ * (2026-08-17 폴드7 실기에서 형이 발견, 그래파이트도 같은 이유로 1.6:1이었다).
+ *
+ * 그래서 이 목록은 "부품"이 아니라 "패널"로 취급한다 — 앱이 이미 쓰고 있는 팝오버 언어
+ * (.ctx-menu: --panel 바탕 + --border 테두리 + --text 글자)를 그대로 따르고, 빈티지 스킨에서만
+ * .settings-row와 똑같은 따뜻한 광택 한 겹을 덧입혀 질감을 맞춘다. */
+.ksel-menu {
+  position: fixed; z-index: 9999; display: none;
+  background: var(--panel); border-radius: 10px;
+  box-shadow: inset 0 1px 0 var(--sheen-hi), 0 0 0 1px var(--border), 0 12px 28px -8px rgba(0,0,0,0.55);
+  padding: 5px; overflow-y: auto; overscroll-behavior: contain;
+}
+.ksel-menu.open { display: block; animation: kselIn 0.13s ease-out; }
+@keyframes kselIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .ksel-menu.open { animation: none; } }
+.ksel-opt {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 9px 11px; border-radius: 7px; cursor: pointer;
+  font-family: var(--mono); font-size: 12px; color: var(--text2);
+  white-space: nowrap; transition: background 0.12s, color 0.12s;
+}
+/* hover/키보드 이동: --active-tr은 스킨에 따라 --panel과 거의 같은 색이라(미드나잇 #20160D vs
+ * #1C130B) 눈에 안 띄었다. 본문색을 10% 섞으면 어떤 스킨이든 반드시 보이는 차이가 난다.
+ * color-mix를 모르는 엔진을 위해 앞줄에 --active-tr 폴백을 남겨둔다. */
+.ksel-opt:hover, .ksel-opt.hi {
+  color: var(--text);
+  background: var(--active-tr);
+  background: color-mix(in srgb, var(--text) 10%, var(--panel));
+}
+/* 선택된 항목을 --prog 글자색으로만 표시하면, 라이트 계열에서 그 줄이 목록에서 제일 읽기
+ * 힘든 줄이 된다(모던 라이트 #E8492A on #F7F6F3 = 3.9:1). 글자는 --text 그대로 두고
+ * 굵기 + 강조색 배경 + 체크로 구분한다 — 어느 스킨에서도 본문 대비가 유지된다. */
+.ksel-opt[aria-selected="true"] {
+  color: var(--text); font-weight: 700;
+  background: var(--active-tr);
+  background: color-mix(in srgb, var(--prog) 16%, var(--panel));
+}
+.ksel-opt[aria-selected="true"]:hover, .ksel-opt[aria-selected="true"].hi {
+  background: color-mix(in srgb, var(--prog) 26%, var(--panel));
+}
+.ksel-check { opacity: 0; flex-shrink: 0; color: var(--prog); }
+.ksel-opt[aria-selected="true"] .ksel-check { opacity: 1; }
+
 /* 유튜브 API 키 행 — 입력칸+확인버튼+가이드링크가 한 줄에 다 들어가면 줄바꿈이 심해서
    두 번째 줄로 따로 뺀 전용 레이아웃(형 요청, 2026-08-08) */
 .yt-api-row { align-items: flex-start; }
@@ -1152,6 +1230,39 @@ select option { background: var(--card); color: var(--text); }
   box-shadow: inset 0 1px 2px var(--sheen-lo);
 }
 
+/* ---- custom dropdown (.ksel) on vintage skins ----
+   닫힌 버튼은 바로 위 select 규칙과 똑같이 "종이에 눌러 박은 칸"으로 맞춘다. 커스텀 드롭다운이
+   생기기 전 네이티브 select가 이 모습이었는데, 껍데기를 씌우면서 놋쇠 손잡이(--surf-hi→--surf-lo)로
+   바뀌어 버렸다. 미드나잇에서는 그 위에 --readout(옅은 갈색) 글자라 대비가 무너진다.
+   펼친 목록은 .settings-row와 같은 따뜻한 광택 한 겹만 --panel 위에 덧입힌다. */
+[data-theme="ambient"] .ksel-btn, [data-theme="midnight"] .ksel-btn,
+[data-theme="vgraphite"] .ksel-btn,
+[data-theme="vpaper"] .ksel-btn
+{
+  background: var(--bg); border: 1px solid var(--surf-lo); border-radius: 7px;
+  padding: 6px 8px 6px 10px; color: var(--text); font-family: var(--sans);
+  box-shadow: inset 0 1px 2px var(--sheen-lo);
+}
+[data-theme="ambient"] .ksel-btn:focus-visible, [data-theme="midnight"] .ksel-btn:focus-visible,
+[data-theme="vgraphite"] .ksel-btn:focus-visible,
+[data-theme="vpaper"] .ksel-btn:focus-visible,
+[data-theme="ambient"] .ksel-btn.open, [data-theme="midnight"] .ksel-btn.open,
+[data-theme="vgraphite"] .ksel-btn.open,
+[data-theme="vpaper"] .ksel-btn.open
+{ border-color: var(--prog); box-shadow: inset 0 1px 2px var(--sheen-lo), 0 0 0 2px var(--prog); }
+
+[data-theme="ambient"] .ksel-menu, [data-theme="midnight"] .ksel-menu,
+[data-theme="vgraphite"] .ksel-menu,
+[data-theme="vpaper"] .ksel-menu
+{
+  /* .settings-row와 같은 광택이되 절반 세기다. 목록은 여백보다 글자가 훨씬 빽빽해서,
+     행 높이만 한 넓은 카드에 맞춘 0.22 세기를 그대로 쓰면 맨 윗줄 글자 대비가 3.9:1까지
+     떨어진다(미드나잇 기준 실측). 0.10이면 6개 스킨 전부 4.5:1을 넘긴다. */
+  background:
+    linear-gradient(180deg, rgba(255,246,224,0.10), rgba(120,88,44,0.05)),
+    var(--panel);
+}
+
 /* ---- settings rows: subtle translucent warm cards (theme-independent constants, per mockup) ---- */
 [data-theme="ambient"] .settings-row, [data-theme="midnight"] .settings-row,
 [data-theme="vgraphite"] .settings-row,
@@ -1259,11 +1370,22 @@ select option { background: var(--card); color: var(--text); }
 </div>
 
 <div class="search-wrap" id="home-search">
-  <div class="search-box">
-    <span class="icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg></span>
-    <input type="text" id="qs-input" placeholder="Search YouTube or paste a URL..."/>
-    <span class="kbd" id="search-kbd">Ctrl+K</span>
-  </div>
+  <!-- 검색창을 굳이 <form>으로 감싼 이유(2026-08-17, 폴드7 실기에서 형이 발견):
+       검색 탭에 들어갈 때마다 크롬이 "저장된 비밀번호를 사용하시겠습니까?" 팝업을 띄웠다.
+       크롬은 <form>에 속하지 않은 입력칸들을 문서 단위로 묶어서 "가상의 폼 하나"로 취급하는데,
+       이 페이지에는 폼 밖에 있는 password 칸이 4개(유튜브 API 키, 비밀번호 변경 3칸) 있다.
+       그래서 같은 가상 폼에 묶인 유일한 text 칸인 이 검색창이 "아이디 칸"으로 분류됐고,
+       app.js가 검색 탭 전환 때마다 여기에 focus()를 주니(switchView) 매번 팝업이 떴다.
+       전용 <form>으로 감싸면 이 칸의 소속 폼에 password가 하나도 없어서 아이디 후보가 되지 않는다.
+       onsubmit="return false"는 엔터로 폼이 제출되며 페이지가 새로고침되는 걸 막는다
+       (엔터 처리는 원래대로 app.js의 keydown 핸들러가 한다). -->
+  <form class="search-form" autocomplete="off" onsubmit="return false">
+    <div class="search-box">
+      <span class="icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg></span>
+      <input type="text" id="qs-input" name="kmusic-search" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Search YouTube or paste a URL..."/>
+      <span class="kbd" id="search-kbd">Ctrl+K</span>
+    </div>
+  </form>
 </div>
 
 <div class="view active" id="view-home">
@@ -1474,7 +1596,9 @@ select option { background: var(--card); color: var(--text); }
 <div class="modal-ov" id="modal">
   <div class="modal-card">
     <h3 id="modal-title">이름 입력</h3>
-    <input type="text" id="modal-input"/>
+    <!-- autocomplete="off": 이 칸도 폼 밖이라 위의 password 칸들과 같은 "가상 폼"에 묶인다.
+         재생목록 이름 입력이 아이디 칸으로 분류되지 않게 명시적으로 꺼둔다(2026-08-17). -->
+    <input type="text" id="modal-input" autocomplete="off"/>
     <div class="modal-btns">
       <button class="m-cancel" id="modal-cancel">취소</button>
       <button class="m-ok" id="modal-ok">확인</button>
@@ -1487,14 +1611,19 @@ select option { background: var(--card); color: var(--text); }
     <h3 id="pw-modal-title">간편 비밀번호 변경</h3>
     <div id="pw-current-group">
       <div class="pw-lab">현재 비밀번호</div>
-      <input type="password" id="pw-current" placeholder="숫자 4~6자리" inputmode="numeric" maxlength="6" autocomplete="current-password"/>
+      <!-- autocomplete를 current-password/new-password에서 off로 바꾼 이유(2026-08-17):
+           이 세 칸은 폼 밖에 있어서 크롬의 "문서 단위 가상 폼"에 묶인다. current-password는
+           그 가상 폼을 로그인 폼으로 확정 짓는 가장 강한 신호라, 검색창 팝업의 공범이었다.
+           여기 값은 사이트 비밀번호가 아니라 앱 자체의 간편 PIN이라 브라우저 비밀번호 관리에
+           올라갈 이유가 없다. 데스크톱(Electron)에는 비밀번호 관리자가 없어 영향이 없다. -->
+      <input type="password" id="pw-current" placeholder="숫자 4~6자리" inputmode="numeric" maxlength="6" autocomplete="off"/>
       <button type="button" class="pw-forgot" id="pw-forgot">비밀번호를 잊으셨나요? 초기화</button>
     </div>
     <div class="pw-reset-notice" id="pw-reset-notice" style="display:none;">현재 비밀번호 확인 없이 초기화해요. 아래에 새 비밀번호만 입력하면 바로 바뀌어요.</div>
     <div class="pw-lab">새 비밀번호</div>
-    <input type="password" id="pw-new" placeholder="숫자 4~6자리" inputmode="numeric" maxlength="6" autocomplete="new-password"/>
+    <input type="password" id="pw-new" placeholder="숫자 4~6자리" inputmode="numeric" maxlength="6" autocomplete="off"/>
     <div class="pw-lab">새 비밀번호 확인</div>
-    <input type="password" id="pw-new-confirm" placeholder="다시 한 번" inputmode="numeric" maxlength="6" autocomplete="new-password"/>
+    <input type="password" id="pw-new-confirm" placeholder="다시 한 번" inputmode="numeric" maxlength="6" autocomplete="off"/>
     <div id="pw-error" role="alert" aria-live="polite"></div>
     <div class="modal-btns">
       <button class="m-cancel" id="pw-cancel" type="button">취소</button>

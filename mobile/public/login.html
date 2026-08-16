@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+<meta name="robots" content="noindex, nofollow"/>
+<meta name="theme-color" content="#0d0d0f"/>
+<title>K-Music</title>
+<!-- 로그인 화면에서 바로 "홈 화면에 추가"를 하는 경우가 많다(아직 로그인 전이니까).
+     이 태그들이 없으면 그때 만든 바로가기에는 로고가 안 붙는다. -->
+<link rel="manifest" href="/manifest.webmanifest"/>
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png"/>
+<link rel="icon" type="image/png" sizes="192x192" href="/m/icon-192.png"/>
+<link rel="stylesheet" href="/m/login.css"/>
+</head>
+<body>
+<div class="wrap">
+  <div class="brand">
+    <span class="mark">K</span>
+    <span class="word">Music <span class="sub">Player</span></span>
+  </div>
+
+  <form class="card" id="form" autocomplete="off">
+    <label class="lab" for="name">이름</label>
+    <input class="inp" id="name" type="text" maxlength="12" autocomplete="username" spellcheck="false" required/>
+
+    <label class="lab" for="pin">간편 비밀번호</label>
+    <input class="inp" id="pin" type="password" inputmode="numeric" maxlength="6" placeholder="숫자 4~6자리" autocomplete="current-password" required/>
+
+    <!-- 계정이 하나도 없는 최초 상태에서만 서버가 이 칸을 요구한다. 서버 콘솔에 찍히는
+         일회용 토큰을 넣어야 첫 계정이 만들어지고, 그 뒤로는 등록 경로가 완전히 닫힌다. -->
+    <div id="setup-wrap" class="hidden">
+      <label class="lab" for="setup">최초 등록 토큰</label>
+      <input class="inp" id="setup" type="text" autocomplete="off" spellcheck="false"/>
+      <div class="hint">서버를 처음 켰을 때 터미널에 찍힌 값이에요.</div>
+    </div>
+
+    <div class="err" id="err"></div>
+    <button class="submit" id="submit" type="submit">들어가기</button>
+  </form>
+
+  <div class="foot">이 주소는 개인용이에요. 다른 사람에게 공유하지 마세요.</div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const REASONS = {
+  invalid_login: '이름이나 비밀번호가 맞지 않아요.',
+  too_many_attempts: '시도가 너무 많아요. 15분 뒤에 다시 해주세요.',
+  setup_token_required: '최초 등록 토큰이 필요해요.',
+  invalid_name: '이름은 1~12자로 적어주세요.',
+  invalid_pin: '비밀번호는 숫자 4~6자리예요.',
+  bad_request: '입력값을 다시 확인해주세요.'
+};
+
+$('form').addEventListener('submit', async e => {
+  e.preventDefault();
+  $('err').textContent = '';
+  $('submit').disabled = true;
+
+  const body = { name: $('name').value.trim(), pin: $('pin').value };
+  const setup = $('setup').value.trim();
+  if (setup) body.setupToken = setup;
+
+  let data;
+  try {
+    const res = await fetch('/api/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify(body)
+    });
+    data = await res.json();
+  } catch {
+    $('err').textContent = '서버에 연결할 수 없어요.';
+    $('submit').disabled = false;
+    return;
+  }
+
+  if (data && data.ok) { location.href = '/'; return; }
+
+  // 아직 계정이 없는 상태라 토큰이 필요하다는 응답이면, 그 칸을 열어준다.
+  if (data && data.reason === 'setup_token_required') $('setup-wrap').classList.remove('hidden');
+
+  $('err').textContent = (data && REASONS[data.reason]) || '로그인하지 못했어요.';
+  $('submit').disabled = false;
+});
+</script>
+</body>
+</html>

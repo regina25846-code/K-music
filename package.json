@@ -1,6 +1,6 @@
 {
   "name": "kris-music",
-  "version": "2.1.0-17",
+  "version": "2.2.0",
   "description": "K-Music Player — Lightweight YouTube Music Player",
   "author": "KrisB",
   "main": "main.js",
@@ -12,6 +12,11 @@
     "appId": "com.kris.music",
     "productName": "K-Music",
     "asar": false,
+    "files": [
+      "**/*",
+      "!mobile",
+      "!mobile${/*}"
+    ],
     "compression": "maximum",
     "electronLanguages": [
       "ko",

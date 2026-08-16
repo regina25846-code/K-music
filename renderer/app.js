@@ -399,6 +399,203 @@ function applyTheme(theme) {
   }
 }
 
+// ── 커스텀 드롭다운 ───────────────────────────────────────────────────────────
+// 네이티브 <select>는 펼친 목록을 OS가 그려서 CSS가 하나도 안 먹는다. 폰에서는 회색 시스템
+// 피커가 올라오고 데스크톱에서는 윈도우 기본 흰 목록이 떠서, 앱 디자인과 따로 놀았다.
+//
+// 여기서는 <select>를 없애지 않는다. 값의 원본은 계속 select이고(그래서 config 저장/불러오기
+// 코드는 한 줄도 안 바뀐다), 눈에 보이는 버튼과 목록만 새로 그린다. 이 함수가 안 불리면
+// 네이티브 select가 그대로 보이고 그대로 동작한다.
+const SELECT_VALUE_DESC = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value');
+
+function enhanceSelect(sel) {
+  if (!sel || sel.dataset.kselDone) return;
+  sel.dataset.kselDone = '1';
+
+  const wrap = document.createElement('div');
+  wrap.className = 'ksel';
+  sel.parentNode.insertBefore(wrap, sel);
+  wrap.appendChild(sel);
+  sel.classList.add('ksel-native');
+
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'ksel-btn';
+  btn.setAttribute('aria-haspopup', 'listbox');
+  btn.setAttribute('aria-expanded', 'false');
+  const label = document.createElement('span');
+  label.className = 'ksel-label';
+  btn.appendChild(label);
+  btn.insertAdjacentHTML('beforeend',
+    '<svg class="ksel-caret" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>');
+  wrap.appendChild(btn);
+
+  // 목록은 body 바로 밑에 붙인다 — 설정 패널이 overflow:auto라 그 안에 두면 잘린다.
+  const menu = document.createElement('div');
+  menu.className = 'ksel-menu';
+  menu.setAttribute('role', 'listbox');
+  document.body.appendChild(menu);
+
+  let items = [];
+  let hi = -1;
+
+  function build() {
+    menu.textContent = '';
+    items = [];
+    [...sel.options].forEach((o, i) => {
+      const d = document.createElement('div');
+      d.className = 'ksel-opt';
+      d.setAttribute('role', 'option');
+      d.dataset.value = o.value;
+      const t = document.createElement('span');
+      t.textContent = o.textContent;
+      d.appendChild(t);
+      d.insertAdjacentHTML('beforeend',
+        '<svg class="ksel-check" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>');
+      d.addEventListener('click', () => choose(i));
+      menu.appendChild(d);
+      items.push(d);
+    });
+  }
+
+  // select의 현재 값 → 버튼 글자와 체크표시에 반영
+  function sync() {
+    const o = sel.options[sel.selectedIndex];
+    label.textContent = o ? o.textContent : '';
+    items.forEach((d, i) => d.setAttribute('aria-selected', String(i === sel.selectedIndex)));
+  }
+
+  function choose(i) {
+    if (i < 0 || i >= sel.options.length) return;
+    sel.selectedIndex = i;
+    sync();
+    // app.js 다른 곳이 걸어둔 onchange(스킨 실시간 미리보기)를 네이티브와 똑같이 발화시킨다
+    sel.dispatchEvent(new Event('change', { bubbles: true }));
+    close();
+    btn.focus();
+  }
+
+  function place() {
+    const r = btn.getBoundingClientRect();
+    const vw = window.innerWidth, vh = window.innerHeight;
+    menu.style.minWidth = r.width + 'px';
+    menu.style.maxHeight = '';
+    const full = menu.offsetHeight;
+    const below = vh - r.bottom - 12;
+    const above = r.top - 12;
+    // 아래가 모자라고 위가 더 넓으면 위로 펼친다
+    const up = full > below && above > below;
+    const maxH = Math.max(120, up ? above : below);
+    menu.style.maxHeight = maxH + 'px';
+    const h = Math.min(full, maxH);
+    menu.style.top = (up ? r.top - 6 - h : r.bottom + 6) + 'px';
+    // 설정 행에서 이 컨트롤은 오른쪽 끝에 있으므로 오른쪽을 기준으로 맞춘다
+    let left = r.right - menu.offsetWidth;
+    left = Math.min(left, vw - menu.offsetWidth - 8);
+    menu.style.left = Math.max(8, left) + 'px';
+  }
+
+  let swallowClick = false;
+
+  function open() {
+    if (menu.classList.contains('open')) return;
+    build();
+    sync();
+    hi = sel.selectedIndex;
+    paintHi();
+    menu.classList.add('open');
+    btn.classList.add('open');
+    btn.setAttribute('aria-expanded', 'true');
+    place();
+    items[hi]?.scrollIntoView({ block: 'nearest' });
+  }
+
+  function close() {
+    if (!menu.classList.contains('open')) return;
+    menu.classList.remove('open');
+    btn.classList.remove('open');
+    btn.setAttribute('aria-expanded', 'false');
+  }
+
+  function paintHi() {
+    items.forEach((d, i) => d.classList.toggle('hi', i === hi));
+  }
+
+  function move(delta) {
+    const n = sel.options.length;
+    if (!n) return;
+    hi = (hi + delta + n) % n;
+    paintHi();
+    items[hi]?.scrollIntoView({ block: 'nearest' });
+  }
+
+  btn.addEventListener('click', () => {
+    menu.classList.contains('open') ? close() : open();
+  });
+
+  btn.addEventListener('keydown', e => {
+    const isOpen = menu.classList.contains('open');
+    if (e.key === 'Escape') { if (isOpen) { e.preventDefault(); close(); } return; }
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (!isOpen) { open(); return; }
+      move(e.key === 'ArrowDown' ? 1 : -1);
+      return;
+    }
+    if (e.key === 'Home' || e.key === 'End') {
+      if (!isOpen) return;
+      e.preventDefault();
+      hi = e.key === 'Home' ? 0 : sel.options.length - 1;
+      paintHi();
+      items[hi]?.scrollIntoView({ block: 'nearest' });
+      return;
+    }
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      isOpen ? choose(hi) : open();
+    }
+  });
+
+  // 바깥을 누르면 닫는다. 그 탭이 설정 오버레이 배경까지 도달하면 설정창까지 같이 닫혀버려서
+  // (app.js의 "바깥 클릭 시 닫기"), 목록을 닫은 그 한 번의 click만 삼킨다.
+  document.addEventListener('pointerdown', e => {
+    if (!menu.classList.contains('open')) return;
+    if (wrap.contains(e.target) || menu.contains(e.target)) return;
+    close();
+    swallowClick = true;
+  }, true);
+  document.addEventListener('click', e => {
+    if (!swallowClick) return;
+    swallowClick = false;
+    e.stopPropagation();
+  }, true);
+
+  // 스크롤/리사이즈하면 목록이 버튼에서 떨어져 나가므로 닫는다(설정 패널 스크롤 포함이라 capture).
+  // 단, 목록 자체를 스크롤하는 경우는 예외 — 항목이 많아 목록 안에서 스크롤할 때 닫히면 못 고른다.
+  window.addEventListener('scroll', e => {
+    if (e.target === menu) return;   // 목록 안에서 굴리는 중
+    close();
+  }, true);
+  window.addEventListener('resize', close);
+
+  // app.js가 openSettings에서 sel.value = ... 로 값을 직접 넣는다. 그건 change 이벤트를
+  // 쏘지 않기 때문에, 그 대입을 가로채서 버튼 글자를 같이 갱신한다.
+  if (SELECT_VALUE_DESC && SELECT_VALUE_DESC.set) {
+    Object.defineProperty(sel, 'value', {
+      configurable: true,
+      get() { return SELECT_VALUE_DESC.get.call(this); },
+      set(v) { SELECT_VALUE_DESC.set.call(this, v); sync(); }
+    });
+  }
+  sel.addEventListener('change', sync);
+
+  build();
+  sync();
+}
+
+// 설정의 스킨 선택. 앞으로 <select>가 늘어도 여기에 걸리면 자동으로 같은 디자인이 된다.
+document.querySelectorAll('.srow-ctrl select').forEach(enhanceSelect);
+
 // ── settings overlay ──────────────────────────────────────────────────────────
 async function openSettings() {
   updateAccountUi();
