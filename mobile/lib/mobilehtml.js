@@ -42,11 +42,16 @@ const MOBILE_HEAD = `
 `;
 
 // 순서가 중요하다. api-shim은 반드시 app.js보다 먼저(그래야 window.api가 이미 있다),
-// mediasession/mobile-boot은 반드시 app.js보다 나중(그래야 app.js의 전역 함수를 잡을 수 있다).
+// mediasession/mobile-boot/playback-guard/gapless는 반드시 app.js보다 나중(그래야 app.js의
+// 전역 함수·변수를 잡을 수 있다).
+// gapless는 맨 마지막이어야 한다 — mobile-boot이 audio.play에 심어둔 자동재생 시임까지
+// 포함해서 그 위에 재생거절 가드를 덮어써야 하기 때문이다(gapless.js 주석 참고).
 const MOBILE_SCRIPTS = `<script src="/m/api-shim.js"></script>
 <script src="/app.js"></script>
 <script src="/m/mediasession.js"></script>
-<script src="/m/mobile-boot.js"></script>`;
+<script src="/m/mobile-boot.js"></script>
+<script src="/m/playback-guard.js"></script>
+<script src="/m/gapless.js"></script>`;
 
 const ANCHORS = [
   ['<html lang="ko">', '<html lang="ko" class="m">'],

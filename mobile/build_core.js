@@ -57,6 +57,19 @@ const SECTIONS = [
   // 서버는 여러 기기가 동시에 붙을 수 있어서 전역 활성계정을 보면 요청끼리 섞인다 —
   // 로그인 세션에 박힌 accountId로 대체한다.
   {
+    name: '안정 시드 IPC 본문 → getAnchorSeed()',
+    from: "ipcMain.handle('get-anchor-seed', (_, excludeItems, currentSeedId) => {",
+    to: '// ── 추천 IPC ─',
+    transform: [
+      [
+        "ipcMain.handle('get-anchor-seed', (_, excludeItems, currentSeedId) => {",
+        'function getAnchorSeed(accountId, excludeItems, currentSeedId) {'
+      ],
+      ['const account = getActiveAccount();', 'const account = getAccountById(accountId);'],
+      [/\}\);\s*$/, '}\n']
+    ]
+  },
+  {
     name: '추천 IPC 본문 → getRecommendations()',
     from: "ipcMain.handle('get-recommendations', async (_, seedYtUrl, excludeItems, count) => {",
     to: "// eventType: 'play' | 'complete' | 'skip'.",
@@ -115,11 +128,35 @@ if (!fs.existsSync(HISTORY_DIR)) fs.mkdirSync(HISTORY_DIR, { recursive: true });
 
 // main.js의 getYtDlpPath는 app.isPackaged로 "설치된 앱 안의 yt-dlp.exe"를 먼저 보는데,
 // 서버는 항상 맥미니에서 도니까 그 분기가 의미가 없다. 맥용 후보만 순서대로 확인한다.
+//
+// ── 오버라이드 통로(2026-08-18 신설, 임시 성격) ──────────────────────────────
+// 데스크톱(main.js)에 넣은 것과 같은 목적이다. 유튜브가 SABR 전용 스트리밍을 켜면서
+// yt-dlp 2026.07.04로 뽑은 스트림 주소가 앞쪽 1,000,000바이트까지만 서빙되고 그 뒤는
+// 403으로 끊긴다(실측). 모바일에서는 프록시가 그 403을 410으로 바꿔 내려주기 때문에
+// 폰에서는 "재생 실패 → 주소 재발급 → 또 실패"가 반복된다.
+// yt-dlp 수정(visionos 클라이언트 추가 #17184, 2026-07-09 머지)은 나이틀리에 이미 들어가
+// 있고 PO Token 없이 정상 동작하는 걸 확인했지만, 아직 정식 릴리스에는 안 실렸다.
+//
+// 데스크톱은 앱 재빌드가 필요해서 userData 아래에 통로를 뒀는데, 서버는 원래부터
+// KMUSIC_YTDLP 환경변수로 실행파일을 지정할 수 있었다. 여기에 "파일만 떨어뜨리면 되는"
+// 경로를 하나 더 추가한다 — DATA_DIR/bin/yt-dlp. 환경변수를 못 건드리는 상황(이미 떠 있는
+// 서버를 그대로 두고 다음 재기동 때부터 반영하고 싶을 때)에서 쓰기 위한 것이다.
+// 우선순위는 KMUSIC_YTDLP → DATA_DIR/bin/yt-dlp → 기존 시스템 경로 순. 둘 다 없으면
+// 예전과 완전히 똑같이 동작한다.
+//
+// 걷어낼 때: 정식 릴리스가 깔리면 override 파일만 지우면 원복이고, 후보 배열에서 그 한 줄만
+// 빼면 이 통로 자체가 사라진다.
+//
+// 타임아웃을 5초에서 15초로 올린 이유: yt-dlp 공식 단독 실행파일은 PyInstaller onefile이라
+// 호출마다 압축을 푸느라 첫 응답이 느리다(맥 실측 8.5초). 5초로 두면 멀쩡한 바이너리를
+// 고장난 것으로 오판하고 조용히 다음 후보로 넘어간다. 실행파일이 아예 없는 후보는
+// ENOENT로 즉시 실패하므로 이 값이 올라가도 탐색이 느려지지 않는다.
 let _ytDlpPathCache = null;
 function getYtDlpPath() {
   if (_ytDlpPathCache) return _ytDlpPathCache;
   const candidates = [
     process.env.KMUSIC_YTDLP,
+    path.join(DATA_DIR, 'bin', 'yt-dlp'),
     '/opt/homebrew/bin/yt-dlp',
     '/usr/local/bin/yt-dlp',
     path.join(__dirname, '..', '..', 'bin', 'yt-dlp'),
@@ -127,7 +164,7 @@ function getYtDlpPath() {
   ].filter(Boolean);
   for (const c of candidates) {
     try {
-      require('child_process').execFileSync(c, ['--version'], { timeout: 5000, stdio: 'ignore' });
+      require('child_process').execFileSync(c, ['--version'], { timeout: 15000, stdio: 'ignore' });
       _ytDlpPathCache = c;
       return c;
     } catch {}
@@ -183,10 +220,13 @@ module.exports = {
   scoreCandidate, cooldownPenalty, reorderByHistory,
   fetchViewCounts, popularityScore, buildMaxLogByDecade,
   looksLikeSameSong, dedupeSimilarSongs, excludesAsSongList,
-  findOverused, partitionOverused, pickDiverseChannels,
+  findOverused, findDominant, partitionOverused, pickDiverseChannels, learnHistoryAliases,
+  // 가수 신원(같은 사람인지) 판정 — 2026-08-25 신설
+  makeArtistIndex, identitySegments, splitPerformers, rawArtistRegion, ARTIST_KEY_STOPWORDS,
   MIX_EXCLUDE_RE, BROADCAST_CHANNEL_RE, LIVE_BROADCAST_RE,
+  pickAnchorSeed, buildRankedCandidates,
   // main.js의 IPC 핸들러 본문을 그대로 함수로 만든 것
-  getRecommendations, recordPlayEvent
+  getAnchorSeed, getRecommendations, recordPlayEvent
 };
 `;
 

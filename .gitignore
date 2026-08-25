@@ -4,3 +4,4 @@ bin/yt-dlp
 bin/yt-dlp.exe
 *.log
 .DS_Store
+bin/yt-dlp.exe.bak_*

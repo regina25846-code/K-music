@@ -117,7 +117,19 @@
   audio.addEventListener('loadedmetadata', () => { syncMetadata(); syncPosition(); });
   audio.addEventListener('durationchange', syncPosition);
   audio.addEventListener('seeked', syncPosition);
-  audio.addEventListener('emptied', () => { ms.playbackState = 'none'; syncMetadata(); });
+  // ⚠️ emptied는 "재생이 끝났다"는 뜻이 아니다. app.js가 곡을 넘길 때 audio.src를 갈아끼우는
+  // 그 순간에도 매번 발생한다(2026-08-21 브라우저 프로브로 확인 — ended 2초 뒤 emptied).
+  // 여기서 playbackState를 무조건 'none'으로 내리면, 곡이 넘어가는 그 몇 초 동안 OS에
+  // "이제 아무것도 안 틉니다"라고 신고하는 꼴이 된다. 안드로이드는 그 순간 미디어 알림을
+  // 내리고 오디오 포커스를 놓아버리고, 그 상태에서 뒤늦게 도착한 다음 곡의 play()가
+  // 백그라운드에서 거절될 수 있다(형 신고: "백그라운드에서 다음 곡부터 끊긴다").
+  // 그래서 진짜로 멈춘 경우(stopAudio가 playingPl을 -1로 되돌린 경우)에만 'none'으로 내린다.
+  audio.addEventListener('emptied', () => {
+    let stopped = true;
+    try { stopped = (typeof playingPl === 'undefined') || playingPl < 0; } catch { stopped = true; }
+    if (stopped) ms.playbackState = 'none';
+    syncMetadata();
+  });
 
   // 위치 갱신은 잠금화면 진행바용이라 자주 할 필요가 없다 — 5초마다면 충분하고,
   // 배터리도 아낀다(app.js의 ontimeupdate에 얹으면 초당 4회씩 불린다).

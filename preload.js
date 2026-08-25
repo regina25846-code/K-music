@@ -50,5 +50,6 @@ contextBridge.exposeInMainWorld('api', {
   getBlockedChannels: () => ipcRenderer.invoke('get-blocked-channels'),
   // 추천(2026-08-07 추가)
   getRecommendations: (seedYtUrl, excludeIds, count) => ipcRenderer.invoke('get-recommendations', seedYtUrl, excludeIds, count),
+  getAnchorSeed: (excludeItems, currentSeedId) => ipcRenderer.invoke('get-anchor-seed', excludeItems, currentSeedId),
   recordPlayEvent: (ytUrl, meta, eventType) => ipcRenderer.invoke('record-play-event', ytUrl, meta, eventType)
 });

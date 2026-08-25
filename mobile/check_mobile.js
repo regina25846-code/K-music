@@ -109,12 +109,16 @@ if (injected) {
   check('A6b mobile.css 링크', () => has('/m/mobile.css') || '없음');
   check('A7 원본 상대경로 app.js 태그가 남지 않음', () =>
     !has('<script src="app.js"></script>') || '남아있음');
-  check('스크립트 순서(shim → app.js → mediasession → boot)', () => {
+  check('스크립트 순서(shim → app.js → mediasession → boot → playback-guard → gapless)', () => {
     const i1 = injected.indexOf('/m/api-shim.js');
     const i2 = injected.indexOf('<script src="/app.js">');
     const i3 = injected.indexOf('/m/mediasession.js');
     const i4 = injected.indexOf('/m/mobile-boot.js');
-    return (i1 >= 0 && i1 < i2 && i2 < i3 && i3 < i4) || `순서 어긋남 ${i1}/${i2}/${i3}/${i4}`;
+    const i5 = injected.indexOf('/m/playback-guard.js');
+    // gapless는 mobile-boot의 audio.play 시임까지 덮어써야 해서 반드시 맨 마지막이다.
+    const i6 = injected.indexOf('/m/gapless.js');
+    return (i1 >= 0 && i1 < i2 && i2 < i3 && i3 < i4 && i4 < i5 && i5 < i6) ||
+      `순서 어긋남 ${i1}/${i2}/${i3}/${i4}/${i5}/${i6}`;
   });
   check('원본 마크업 보존(bottom-nav, audio)', () =>
     (has('class="bottom-nav"') && /id="audio"/.test(injected)) || '원본 요소가 사라짐');
@@ -142,6 +146,81 @@ check('오디오 프록시가 Range 헤더를 중계함', () => {
 check('프록시가 리다이렉트를 서버에서 따라감(폰에 googlevideo 주소를 넘기지 않음)', () => {
   const src = read('mobile/lib/streamproxy.js');
   return /301, 302, 303, 307, 308/.test(src) || '리다이렉트 처리 없음';
+});
+
+// ── H. 백그라운드 재생 끊김 재발 방지(2026-08-18) ─────────────────────────────
+// 곡 중간에 소리가 끊기던 원인 두 갈래를 각각 못질해둔다.
+check('프록시에 본문 스트리밍을 죽이는 소켓 유휴 타임아웃이 없음', () => {
+  const src = read('mobile/lib/streamproxy.js');
+  const code = src.split('\n').filter(l => !l.trim().startsWith('//')).join('\n');
+  // req.setTimeout / socket.setTimeout은 헤더를 받은 뒤에도 살아있어서, 브라우저가 버퍼를
+  // 채우고 읽기를 쉬는 20초 동안 업스트림을 끊어버린다(= 곡 중간 무음 정지).
+  if (/\breq\.setTimeout\s*\(/.test(code)) return 'req.setTimeout이 남아있음(본문 중간에 끊김)';
+  if (/\bsocket\.setTimeout\s*\(/.test(code)) return 'socket.setTimeout이 남아있음';
+  if (!/clearTimeout\(guard\)/.test(code)) return '헤더 수신 시 타임아웃 해제가 없음';
+  return true;
+});
+
+check('시임 RPC에 응답 대기 상한이 있음(fetch 영구 매달림 방지)', () => {
+  const src = read('mobile/public/api-shim.js');
+  if (!/signal:\s*timeoutSignal\(\)/.test(src)) return 'fetch에 타임아웃 signal이 없음';
+  return true;
+});
+
+check('시임 saveConfig가 예외를 던지지 않음(재생 중 오탐 스킵 방지)', () => {
+  const src = read('mobile/public/api-shim.js');
+  if (/saveConfig:\s*\(cfg\)\s*=>\s*rpc\(/.test(src)) return 'saveConfig가 그대로 throw하는 rpc임';
+  if (!/saveConfig:\s*soft\(/.test(src)) return 'saveConfig가 soft 래퍼가 아님';
+  return true;
+});
+
+check('재생 감시견(playback-guard)이 존재하고 app.js를 수정하지 않음', () => {
+  const src = read('mobile/public/playback-guard.js');
+  if (!/setInterval\(watchdog/.test(src)) return '감시 타이머가 없음';
+  if (!/maybeExtendQueue/.test(src)) return '큐 보충 재시도가 없음';
+  const js = read('renderer/app.js');
+  if (/playback-guard|watchdog/.test(js)) return 'app.js에 모바일 감시 코드가 섞여들어감';
+  return true;
+});
+
+// ── I. 곡 전환 끊김 재발 방지(2026-08-21) ─────────────────────────────────────
+// "백그라운드에서 다음 곡부터 끊긴다"의 구조적 원인 세 갈래를 각각 못질해둔다.
+check('다음 곡 스트림 주소를 미리 받아 streamCache에 꽂아둠(전환 무음구간 제거)', () => {
+  const src = read('mobile/public/gapless.js');
+  const code = src.split('\n').filter(l => !l.trim().startsWith('//')).join('\n');
+  if (!/window\.api\.getStream\(/.test(code)) return '미리 받기 호출이 없음';
+  if (!/cache\[ytUrl\]\s*=\s*\{/.test(code)) return 'app.js의 streamCache에 써넣지 않음';
+  // 타이머는 백그라운드에서 조여든다 — 반드시 미디어 이벤트에 얹혀 있어야 한다.
+  if (!/addEventListener\('timeupdate'/.test(code)) return '미리 받기가 미디어 이벤트에 얹혀있지 않음';
+  if (/setInterval\(/.test(code)) return 'setInterval에 의존하고 있음(백그라운드에서 조여듦)';
+  return true;
+});
+
+check('브라우저 재생거절(NotAllowedError)이 자동 스킵 연쇄로 번지지 않음', () => {
+  const src = read('mobile/public/gapless.js');
+  const code = src.split('\n').filter(l => !l.trim().startsWith('//')).join('\n');
+  if (!/NotAllowedError/.test(code)) return '재생거절 판별이 없음';
+  if (!/Object\.defineProperty\(audio, 'play'/.test(code)) return 'mobile-boot의 play 교체를 못 버티는 감싸기임';
+  if (!/visibilitychange/.test(code)) return '되살리기 트리거가 없음';
+  return true;
+});
+
+check('곡 전환 중 emptied로 미디어 세션을 내리지 않음', () => {
+  const src = read('mobile/public/mediasession.js');
+  const code = src.split('\n').filter(l => !l.trim().startsWith('//')).join('\n');
+  if (/'emptied',\s*\(\)\s*=>\s*\{\s*ms\.playbackState\s*=\s*'none'/.test(code)) {
+    return 'emptied에서 무조건 playbackState=none으로 내리고 있음';
+  }
+  if (!/if \(stopped\) ms\.playbackState = 'none'/.test(code)) return '정지 여부 판별이 없음';
+  return true;
+});
+
+check('gapless가 app.js/데스크톱을 건드리지 않음', () => {
+  const js = read('renderer/app.js');
+  if (/gapless|prefetchNext|pendingResume/.test(js)) return 'app.js에 모바일 전용 코드가 섞여들어감';
+  const html = read('renderer/index.html');
+  if (html.includes('gapless')) return 'index.html에 gapless가 박혀있음';
+  return true;
 });
 
 // ── G. 인증 게이트 ────────────────────────────────────────────────────────────

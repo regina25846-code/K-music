@@ -348,6 +348,8 @@ const RPC = {
   // 추천/재생기록 — main.js의 IPC 본문을 그대로 뽑아온 core 함수를 호출한다
   getRecommendations: (s, seedYtUrl, excludeItems, count) =>
     core.getRecommendations(s.accountId, seedYtUrl, excludeItems, count),
+  getAnchorSeed: (s, excludeItems, currentSeedId) =>
+    core.getAnchorSeed(s.accountId, excludeItems, currentSeedId),
   recordPlayEvent: (s, ytUrl, meta, eventType) =>
     core.recordPlayEvent(s.accountId, ytUrl, meta, eventType),
 

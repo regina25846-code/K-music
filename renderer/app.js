@@ -99,12 +99,52 @@ function addManualTrack(plIdx, trackData, { autoplayNow = false } = {}) {
 // 재생 중인 목록의 현재 곡 뒤에 아직 안 나온 "직접 추가한 곡"이 남아있으면 대기하고, 자동추천
 // 꼬리가 3곡 미만으로 줄었을 때만 부족한 만큼 채워넣는다.
 //
-// 시드는 항상 "지금 실제로 재생중인 곡"으로 고정한다 — 예전엔 큐에 마지막으로 넣어둔 곡을
+// 시드의 기본값은 "지금 실제로 재생중인 곡"이다 — 예전엔 큐에 마지막으로 넣어둔 곡을
 // 다음 시드로 삼아서(체이닝), 채워질 때마다 그 3번째곡 → 또 그 3번째곡 하는 식으로 계속
 // 이어붙였는데, 이러면 유튜브 믹스 특성상 몇 단계만 넘어가도 원래 곡과 전혀 상관없는 방향
 // 으로 새버린다(형 실사용 중 발견, 2026-08-08 — 풀하우스 OST 듣다가 몇 단계 만에 인도네시아
 // 밴드 노래로 도배됨). 매번 지금 듣고 있는 곡에서 다시 출발하면 드리프트가 누적되지 않는다.
+//
+// ── 시드 섞기(2026-08-22 신설) ────────────────────────────────────────────────
+// 그런데 시드를 현재곡 하나로만 두면 반대쪽 실패가 생긴다. 이 함수는 꼬리를 3곡으로 유지하니까
+// 한 곡 넘어갈 때마다 1곡씩 채우고, 그 1곡은 3칸 뒤에 꽂힌다 — 즉 큐가 서로 독립적인 3개
+// 갈래로 굴러간다. 유튜브 믹스는 시드가 특정 가수의 공식채널 영상이면 후보가 사실상 그 가수로만
+// 채워지므로(실측: BANGTANTV 시드 → 후보 19개 전부 BANGTANTV), 한 갈래가 그런 곡에 걸리면
+// 그 갈래는 영원히 그 가수만 뱉는다. 형 실제 재생기록 2026-08-22 04:20~07:17의 45곡이
+// `..B..B..B..B..B..B..B..B..B..B..BBBBBBBBBBBBB`(B=방탄) 였던 게 바로 이 3주기 구조의 흔적이고,
+// 마지막엔 세 갈래가 전부 물들어 13곡 연속이 됐다.
+//
+// 그래서 매번은 아니고 일부 칸만 다른 시드에서 출발시켜 갈래끼리 섞이게 한다. 고정 비율로
+// 기계적으로 바꾸는 게 아니라, ①평상시엔 낮은 확률로만 섞고 ②최근 자동추천이 실제로 한쪽에
+// 쏠려 있으면 확률을 올리고 ③연속 두 번은 섞지 않는다(=최소 절반은 항상 지금 듣는 곡에서 출발).
+// 쏠림이 없을 땐 예전과 거의 같게 굴러가고, 쏠릴수록 더 자주 빠져나온다.
+//
+// ⚠️ 이 "다른 시드"는 2026-08-08에 폐기한 체이닝이 아니다. 체이닝은 직전에 추천된 곡으로 시드가
+// 한 걸음씩 옮겨가서 세대가 쌓일수록 원곡에서 멀어지는 구조였다. 여기서 쓰는 시드는 메인
+// 프로세스가 "형이 실제로 끝까지 들은 곡 + 직접 재생목록에 넣은 곡"이라는 고정된 집합에서
+// 매번 독립적으로 뽑아준다(main.js pickAnchorSeed) — 이전 선택에 의존하지 않으니 누적 드리프트가
+// 원리적으로 생길 수 없고, 시드가 멀리 가는 게 아니라 매번 형 취향의 원점으로 되돌아온다.
 let extendingQueue = false;
+let lastFillUsedAnchor = false; // 연속 두 번 섞이는 것 방지
+
+// 최근 자동추천 곡들이 한 채널로 얼마나 쏠려 있는지(0~1). 렌더러는 제목에서 가수를 뽑는
+// 규칙(parseArtistTitle)을 갖고 있지 않으므로 채널 기준의 근사치만 본다 — 이건 "섞을 확률을
+// 얼마나 올릴까"를 정하는 힌트일 뿐이고, 가수 단위 판단은 메인 프로세스가 시드를 고를 때 한다.
+function recentAutoSkew(tracks, upto, window = 9) {
+  const recent = [];
+  for (let i = upto; i >= 0 && recent.length < window; i--) {
+    if ((tracks[i]?.source || 'manual') === 'auto') recent.push(tracks[i]);
+  }
+  if (recent.length < 3) return 0;
+  const counts = {};
+  let top = 0;
+  for (const t of recent) {
+    const ch = t.channel || '(알 수 없음)';
+    counts[ch] = (counts[ch] || 0) + 1;
+    if (counts[ch] > top) top = counts[ch];
+  }
+  return top / recent.length;
+}
 async function maybeExtendQueue(plIdx) {
   if (!currentAccount || currentAccount.prefs?.personalizeRecommendations === false) return;
   if (extendingQueue) return;
@@ -131,8 +171,29 @@ async function maybeExtendQueue(plIdx) {
     const excludeItems = tracks
       .map(t => ({ id: videoIdFromUrl(t.ytUrl), title: t.title, duration: t.duration, channel: t.channel, source: t.source || 'manual' }))
       .filter(x => x.id);
-    const recs = await window.api.getRecommendations(`https://www.youtube.com/watch?v=${seedId}`, excludeItems, need);
+
+    // 이번 칸을 현재곡 말고 다른 데서 출발시킬지 결정(위 "시드 섞기" 주석 참고).
+    let seedUrl = `https://www.youtube.com/watch?v=${seedId}`;
+    let usedAnchor = false;
+    // need가 2 이상인 건 큐가 비어있는 시작 시점(형이 방금 곡을 눌렀거나 직접 추가한 직후)이다.
+    // 이때는 한 번의 호출로 꼬리 전체가 채워지므로, 여기서 시드를 바꾸면 형이 방금 고른 곡과
+    // 상관없는 곡으로 큐가 통째로 덮인다 — 재즈 목록에서 실측했더니 9곡이 전부 케이팝이 됐다
+    // (2026-08-22). 갈래가 한 가수에 물리는 건 어차피 need===1인 정상 주행 중에 생기는 일이라,
+    // 섞기는 그때만 한다. 시작 시점엔 형이 고른 곡을 100% 따라간다.
+    if (need === 1 && !lastFillUsedAnchor) {
+      const skew = recentAutoSkew(tracks, currentTrack);
+      const chance = skew >= 0.5 ? 0.7 : skew >= 0.34 ? 0.45 : 0.25;
+      if (Math.random() < chance) {
+        // 메인 프로세스가 지금 도배 중인 가수를 피해서 골라준다. 마땅한 게 없으면 null이라
+        // 예전과 똑같이 현재곡으로 간다.
+        const anchor = await window.api.getAnchorSeed(excludeItems, seedId);
+        if (anchor) { seedUrl = anchor; usedAnchor = true; }
+      }
+    }
+
+    const recs = await window.api.getRecommendations(seedUrl, excludeItems, need);
     if (!recs.length) return;
+    lastFillUsedAnchor = usedAnchor;
     // await 도중 사용자가 다른 곡/목록으로 옮겨갔을 수 있으니 재확인 후 반영 — 예전엔 tracks
     // 배열 자체의 참조 동일성(!==)으로 비교했는데, pruneOldAutoTracks가 오래된 추천곡을
     // 정리할 때마다 filter로 배열을 새로 만들어서 참조가 매번 바뀐다. 큐가 정리 임계치(과거
@@ -1482,7 +1543,9 @@ $('ctx-move').onclick = (e) => {
 $('about-close').onclick = () => $('about-ov').classList.remove('show');
 $('about-ov').addEventListener('click', e => { if(e.target===$('about-ov')) $('about-ov').classList.remove('show'); });
 
-window.api.getAppVersion().then(v => { $('about-version').textContent = `버전 ${v}`; });
+// K-시리즈 About 창 버전 표기는 "v1.2.3" 형식으로 통일(2026-08-25 — K-Clock은 "v",
+// K-Zone/K-Tube/K-Memo/K-Music은 "버전 "이라 나란히 놓으면 표기가 달라 보였음).
+window.api.getAppVersion().then(v => { $('about-version').textContent = `v${v}`; });
 
 $('about-check-update').onclick = () => {
   $('about-check-update').disabled = true;

@@ -930,6 +930,222 @@ select option { background: var(--card); color: var(--text); }
 .about-update-btn:disabled { opacity: 0.6; cursor: default; }
 .about-update-status { font-size: 11px; color: var(--text3); }
 
+/* ═════════════════════════════════════════════════════════════
+   #about-ov 전용 — Spatial Light Glass (다운로드 페이지와 같은 세계관)
+   전부 #about-ov 스코프라 #settings-ov나 다른 오버레이엔 영향 없음.
+   accent(--ab-tint 3형제)는 assets/icon.png에서 직접 추출한 값 —
+   앱 전역 --prog(주황)는 플레이어 UI 전체가 쓰므로 그대로 둔다.
+   ═════════════════════════════════════════════════════════════ */
+#about-ov{
+  --ab-tint:#AF406C; --ab-lite:#F4C0CF; --ab-deep:#801646;
+  --ab-tint-rgb:175,64,108; --ab-lite-rgb:244,192,207;
+  --ab-grad:linear-gradient(140deg,#AF406C 0%,#982C59 52%,#801646 100%);
+  --ab-glass:rgba(255,255,255,.44);
+  --ab-glass-solid:rgba(255,255,255,.84);
+  --ab-mesh-a:.58; --ab-mesh-a2:.72; --ab-sheen:rgba(255,255,255,.55);
+  --ab-glass-inner:rgba(255,255,255,.50);
+  --ab-glass-line:rgba(18,28,54,.10);
+  --ab-glass-hi:rgba(255,255,255,.92);
+  --ab-hairline:rgba(18,28,54,.09);
+  --ab-lift:rgba(255,255,255,.95);
+  --ab-ink:#141922; --ab-ink-2:#525B6B; --ab-ink-3:#8791A2;
+  --ab-tint-ink:#801646;
+  --ab-name-grad:linear-gradient(135deg,#801646 0%,#5C0E32 100%);
+  --ab-prism:.55;
+  --ab-sh-ring:0 0 0 1px rgba(18,28,54,.13);
+  --ab-sh-amb:0 2px 10px -2px rgba(18,28,54,.16);
+  --ab-prism-start:color-mix(in srgb,var(--ab-tint) 55%,transparent);
+  /* K-Clock/K-Tube/K-Memo About와 완전히 같은 그림자 수치 — 5개 앱을 나란히 놓고
+     비교했을 때 카드 부양감이 달라 보이지 않도록 통일(2026-08-25).
+     (K-Music About은 별도 창이 아니라 큰 메인 창 안의 오버레이라, 다른 앱에서
+      문제였던 '그림자가 창 경계에서 잘려 모서리가 각져 보이는' 버그는 없었음.) */
+  --ab-sh:var(--ab-sh-ring),var(--ab-sh-amb),0 1px 2px rgba(18,28,54,.09),0 6px 16px -8px rgba(18,28,54,.24),0 14px 30px -8px rgba(18,28,54,.40);
+  --ab-ico-sh:0 1px 2px rgba(18,28,54,.16),0 12px 22px -10px rgba(18,28,54,.34);
+  --ab-scrim:rgba(12,16,26,.42);
+}
+[data-theme="midnight"] #about-ov,
+[data-theme="vgraphite"] #about-ov,
+html:not([data-theme]) #about-ov,
+[data-theme="dark"] #about-ov{
+  --ab-glass:rgba(255,255,255,.055);
+  --ab-glass-solid:rgba(255,255,255,.095);
+  --ab-glass-inner:rgba(255,255,255,.045);
+  --ab-glass-line:rgba(255,255,255,.13);
+  --ab-glass-hi:rgba(255,255,255,.14);
+  --ab-hairline:rgba(255,255,255,.10);
+  --ab-lift:rgba(255,255,255,.07);
+  --ab-mesh-a:.30; --ab-mesh-a2:.16; --ab-sheen:rgba(255,255,255,.05);
+  --ab-ink:#EEF1F7; --ab-ink-2:#A5AEBE; --ab-ink-3:#737D91;
+  --ab-tint-ink:#F7CDD8;
+  --ab-name-grad:linear-gradient(135deg,#F4C0CF 0%,#D48EA6 100%);
+  --ab-prism:.75;
+  --ab-sh-ring:0 0 0 1px rgba(255,255,255,.10);
+  --ab-sh-amb:0 2px 10px -2px rgba(0,0,0,.45);
+  --ab-prism-start:color-mix(in srgb,var(--ab-lite) 78%,transparent);
+  --ab-sh:var(--ab-sh-ring),var(--ab-sh-amb),0 1px 2px rgba(0,0,0,.5),0 7px 18px -8px rgba(0,0,0,.66),0 15px 32px -8px rgba(0,0,0,.78);
+  --ab-ico-sh:0 1px 2px rgba(0,0,0,.5),0 14px 26px -10px rgba(0,0,0,.75);
+  --ab-scrim:rgba(0,0,0,.58);
+}
+[data-theme="ambient"] #about-ov{
+  --ab-glass:rgba(255,252,244,.54);
+  --ab-glass-solid:rgba(255,252,244,.82);
+  --ab-glass-inner:rgba(255,252,244,.46);
+  --ab-glass-line:rgba(56,40,16,.16);
+  --ab-glass-hi:rgba(255,250,238,.86);
+  --ab-hairline:rgba(56,40,16,.14);
+  --ab-lift:rgba(255,250,238,.92);
+  --ab-mesh-a:.52; --ab-mesh-a2:.62; --ab-sheen:rgba(255,250,238,.48);
+  --ab-ink:#372A18; --ab-ink-2:#6B5636; --ab-ink-3:#927A54;
+  --ab-scrim:rgba(60,42,18,.40);
+}
+[data-theme="midnight"] #about-ov{
+  --ab-glass:rgba(255,220,150,.055);
+  --ab-glass-solid:rgba(255,220,150,.10);
+  --ab-glass-inner:rgba(255,220,150,.05);
+  --ab-glass-line:rgba(255,220,150,.14);
+  --ab-glass-hi:rgba(255,220,150,.13);
+  --ab-hairline:rgba(255,220,150,.10);
+  --ab-lift:rgba(255,220,150,.06);
+  --ab-mesh-a:.30; --ab-mesh-a2:.16; --ab-sheen:rgba(255,220,150,.05);
+  --ab-ink:#EAD6AE; --ab-ink-2:#C0A574; --ab-ink-3:#8C7548;
+}
+#about-ov{
+  background:var(--ab-scrim);
+  -webkit-backdrop-filter:blur(7px) saturate(120%);
+          backdrop-filter:blur(7px) saturate(120%);
+}
+#about-ov .settings-card{
+  position:relative;width:300px;border-radius:20px;overflow:hidden;
+  display:flex;flex-direction:column;isolation:isolate;
+  background:linear-gradient(172deg,var(--bg) 0%,var(--panel) 100%);
+  border:none;box-shadow:var(--ab-sh);
+}
+#about-ov .settings-card::after{
+  content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;z-index:3;padding:1px;
+  background:linear-gradient(135deg,
+    var(--ab-prism-start) 0%,
+    var(--ab-glass-line) 30%,var(--ab-glass-line) 64%,
+    color-mix(in srgb,var(--ab-tint) 52%,transparent) 100%);
+  opacity:var(--ab-prism);
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
+          mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
+  -webkit-mask-composite:xor;mask-composite:exclude;
+}
+#about-ov .ab-aura{
+  position:absolute;inset:-14%;z-index:0;pointer-events:none;
+  background:
+    radial-gradient(260px 190px at 50% 20%, rgba(var(--ab-lite-rgb),var(--ab-mesh-a2)), transparent 64%),
+    radial-gradient(280px 190px at 6% -10%, var(--ab-lift), transparent 60%),
+    radial-gradient(280px 220px at 100% 2%, rgba(var(--ab-tint-rgb),var(--ab-mesh-a)), transparent 62%),
+    radial-gradient(320px 260px at 10% 110%, rgba(var(--ab-tint-rgb),var(--ab-mesh-a)), transparent 60%),
+    radial-gradient(260px 200px at 92% 98%, rgba(var(--ab-lite-rgb),var(--ab-mesh-a2)), transparent 64%);
+}
+#about-ov .ab-pane{
+  position:relative;z-index:2;flex:1;display:flex;flex-direction:column;
+  border-radius:20px;overflow:hidden;
+  background:
+    linear-gradient(180deg,var(--ab-sheen) 0%,transparent 34%),
+    var(--ab-glass);
+  -webkit-backdrop-filter:blur(26px) saturate(175%);
+          backdrop-filter:blur(26px) saturate(175%);
+  box-shadow:inset 0 1px 0 var(--ab-glass-hi);
+}
+#about-ov .settings-head{
+  position:relative;flex:none;display:flex;align-items:center;justify-content:center;
+  padding:14px 16px;border-bottom:1px solid var(--ab-hairline);
+}
+#about-ov .settings-head h2{
+  font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.19em;
+  text-transform:none;color:var(--ab-ink-3);padding-left:.19em;
+}
+#about-ov .settings-close{
+  position:absolute;right:11px;top:50%;transform:translateY(-50%);
+  width:26px;height:26px;padding:0;border-radius:50%;
+  display:grid;place-items:center;cursor:pointer;
+  border:1px solid var(--ab-glass-line);
+  background:var(--ab-glass-inner);
+  box-shadow:inset 0 1px 0 var(--ab-glass-hi);
+  color:var(--ab-ink-3);
+  transition:color .18s ease,background .18s ease,transform .18s ease;
+}
+#about-ov .settings-close svg{width:11px;height:11px;display:block}
+#about-ov .settings-close:hover{color:var(--ab-ink);background:var(--ab-glass-solid);transform:translateY(-50%) rotate(90deg)}
+#about-ov .ab-body{
+  flex:1;display:flex;flex-direction:column;align-items:center;text-align:center;
+  padding:24px 22px 22px;
+}
+#about-ov .ab-mark{position:relative;display:grid;place-items:center;margin-bottom:16px}
+#about-ov .ab-mark::before{
+  content:"";position:absolute;width:180px;height:180px;border-radius:50%;
+  background:radial-gradient(circle,rgba(var(--ab-tint-rgb),.34) 0%,transparent 66%);
+  filter:blur(12px);opacity:.85;
+}
+#about-ov .ab-mark::after{
+  content:"";position:absolute;bottom:-9px;width:66px;height:13px;border-radius:50%;
+  background:radial-gradient(ellipse,var(--ab-deep) 0%,transparent 72%);
+  opacity:.32;filter:blur(5px);
+}
+#about-ov .ab-badge{
+  position:relative;width:100px;height:100px;border-radius:26px;display:grid;place-items:center;
+  background:
+    linear-gradient(155deg,rgba(255,255,255,.30),transparent 40%),
+    color-mix(in srgb,var(--ab-tint) 10%,var(--ab-glass-solid));
+  -webkit-backdrop-filter:blur(14px) saturate(200%);
+          backdrop-filter:blur(14px) saturate(200%);
+  box-shadow:
+    inset 0 1.5px 0 rgba(255,255,255,.55),
+    inset 0 -9px 18px -13px var(--ab-deep),
+    0 1px 2px rgba(18,28,54,.10),
+    0 18px 30px -14px var(--ab-deep),
+    0 34px 52px -30px rgba(18,28,54,.55);
+  transition:transform .5s cubic-bezier(.22,1,.36,1);
+}
+#about-ov .ab-badge:hover{transform:translateY(-4px) rotate(-2deg)}
+#about-ov .ab-badge img{width:80px;height:80px;display:block;border-radius:20px;box-shadow:var(--ab-ico-sh)}
+#about-ov .ab-badge::after{
+  content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;
+  background:linear-gradient(128deg,rgba(255,255,255,.85) 0%,rgba(255,255,255,.24) 15%,transparent 34%);
+  mix-blend-mode:overlay;opacity:.8;
+}
+#about-ov .ab-eyebrow{
+  font-size:9px;font-weight:700;letter-spacing:.42em;text-transform:uppercase;
+  color:var(--ab-ink-3);padding-left:.42em;margin-bottom:9px;
+}
+#about-ov .ab-name{font-size:24px;font-weight:900;letter-spacing:-.045em;line-height:1.05;color:var(--ab-ink);margin-bottom:12px}
+#about-ov .ab-name span{
+  background:var(--ab-name-grad);
+  -webkit-background-clip:text;background-clip:text;color:transparent;
+}
+#about-ov .ab-ver{
+  display:inline-flex;align-items:center;
+  font-size:11.5px;font-weight:700;letter-spacing:.055em;font-variant-numeric:tabular-nums;
+  padding:5px 13px;border-radius:999px;color:var(--ab-tint-ink);
+  background:var(--ab-glass-inner);
+  border:1px solid color-mix(in srgb,var(--ab-tint) 26%,transparent);
+  box-shadow:inset 0 1px 0 var(--ab-glass-hi);margin-bottom:18px;
+}
+#about-ov .ab-rule{width:100%;height:1px;background:var(--ab-hairline);margin-bottom:16px}
+#about-ov .ab-desc{font-size:13px;line-height:1.78;color:var(--ab-ink-2);font-weight:500;margin-bottom:12px}
+#about-ov .ab-copy{font-size:10.5px;line-height:1.5;color:var(--ab-ink-3)}
+#about-ov .about-actions{display:flex;flex-direction:column;align-items:center;gap:9px;margin-top:20px;width:100%}
+#about-ov .about-update-btn{
+  display:inline-flex;align-items:center;gap:8px;
+  font-family:inherit;font-size:13px;font-weight:800;letter-spacing:-.02em;
+  color:#fff;border:none;cursor:pointer;padding:11px 22px;border-radius:13px;
+  background:var(--ab-grad);text-shadow:0 1px 2px rgba(0,0,0,.26);opacity:1;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.34),0 2px 4px rgba(18,28,54,.14),0 13px 24px -11px var(--ab-deep);
+  transition:transform .2s ease,box-shadow .26s ease,filter .2s ease;
+}
+#about-ov .about-update-btn svg{width:15px;height:15px;flex:none;transition:transform .3s ease}
+#about-ov .about-update-btn:hover{
+  opacity:1;transform:translateY(-2px);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.34),0 2px 4px rgba(18,28,54,.14),0 20px 34px -11px var(--ab-deep);
+}
+#about-ov .about-update-btn:hover svg{transform:rotate(120deg)}
+#about-ov .about-update-btn:active{transform:translateY(0)}
+#about-ov .about-update-btn:disabled{opacity:.55;transform:none;cursor:default;filter:saturate(.7)}
+#about-ov .about-update-status{font-size:11px;line-height:1.55;color:var(--ab-ink-3);max-width:230px}
+
 /* ── CONTEXT MENU ── */
 .ctx-menu {
   position: fixed; z-index: 700; background: var(--panel);
@@ -1645,21 +1861,27 @@ select option { background: var(--card); color: var(--text); }
 <div class="loading-ov" id="loading"><div class="spinner"></div><span id="loading-text">로딩 중...</span></div>
 
 <div class="settings-overlay" id="about-ov">
-  <div class="settings-card" style="width:300px">
-    <div class="settings-head">
-      <h2>프로그램 정보</h2>
-      <button class="settings-close" id="about-close"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
-    </div>
-    <div style="padding:20px 24px 28px;text-align:center">
-      <img src="../assets/icon.png" style="width:84px;height:84px;border-radius:20px;margin-bottom:18px;display:block;margin-left:auto;margin-right:auto"/>
-      <div style="font-size:18px;font-weight:800;margin-bottom:4px;color:var(--text)">K-Music</div>
-      <div style="font-size:12px;color:var(--text3);margin-bottom:18px" id="about-version">버전 확인 중...</div>
-      <div style="height:1px;background:var(--border);margin-bottom:16px"></div>
-      <div style="font-size:13px;color:var(--text2);line-height:1.8;margin-bottom:16px">광고 없는 유튜브 음악 플레이어<br>내 취향 학습 추천 재생 · 백그라운드 재생 지원</div>
-      <div style="font-size:11px;color:var(--text3);margin-bottom:16px">© 2026 KrisB. All rights reserved.</div>
-      <div class="about-actions">
-        <button class="about-update-btn" id="about-check-update">업데이트 확인</button>
-        <span class="about-update-status" id="about-update-status"></span>
+  <div class="settings-card">
+    <div class="ab-aura"></div>
+    <div class="ab-pane">
+      <div class="settings-head">
+        <h2>프로그램 정보</h2>
+        <button class="settings-close" id="about-close" aria-label="닫기"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+      </div>
+      <div class="ab-body">
+        <div class="ab-mark">
+          <div class="ab-badge"><img src="../assets/icon.png" alt="K-Music"></div>
+        </div>
+        <div class="ab-eyebrow">K · SERIES</div>
+        <div class="ab-name">K-<span>Music</span></div>
+        <div class="ab-ver" id="about-version">버전 확인 중...</div>
+        <div class="ab-rule"></div>
+        <div class="ab-desc">광고 없는 유튜브 음악 플레이어<br>내 취향 학습 추천 재생 · 백그라운드 재생 지원</div>
+        <div class="ab-copy">© 2026 KrisB. All rights reserved.</div>
+        <div class="about-actions">
+          <button class="about-update-btn" id="about-check-update"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>업데이트 확인</button>
+          <span class="about-update-status" id="about-update-status"></span>
+        </div>
       </div>
     </div>
   </div>

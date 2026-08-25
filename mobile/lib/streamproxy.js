@@ -72,13 +72,46 @@ class StreamTokenStore {
 }
 
 // 업스트림으로 실제 요청을 보내고 응답을 그대로 흘려보낸다.
+//
+// ⚠️ 타임아웃은 "응답 헤더가 올 때까지"만 건다(2026-08-18 수정). 예전에는 req.setTimeout(20초)를
+// 걸어놨는데, 이건 소켓 유휴 타임아웃이라 헤더를 받은 뒤 본문을 흘려보내는 내내 그대로 살아있다.
+// 그런데 오디오 재생은 구조상 이 소켓을 길게 놀린다 — 브라우저는 앞으로 몇십 초~몇 분치를
+// 미리 받아두면 읽기를 멈추고(backpressure), 그동안 upstream.pipe(res)가 막히면서 업스트림
+// 소켓에 아무 데이터도 안 흐른다. 20초가 지나면 타임아웃이 터져 req.destroy()가 불리고,
+// 폰은 본문이 중간에 잘린 응답(ECONNRESET)을 받는다. 그러면 미리 받아둔 버퍼까지만 소리가
+// 나다가 "곡 중간에서 조용히 멈춤"이 된다.
+//
+// 실측(2026-08-18, mobile/lib/streamproxy.js를 그대로 불러서 재현): 클라이언트가 2MB 받고
+// 25초 쉬었을 뿐인데 40MB 중 3.5MB만 받은 채 ECONNRESET. 형이 겪은 "백그라운드로 두면
+// 노래가 멈춘다"의 실제 원인이 이것이다(재생기록상 284초짜리 곡의 131초 지점에서 정지,
+// 큐에는 다음 곡이 3개나 남아있었음).
+//
+// 본문 도중 업스트림이 진짜로 죽는 경우는 타임아웃 대신 아래 handleAudio의 res.on('close')
+// 정리와 클라이언트 쪽 재생 감시(playback-guard.js)가 받아낸다.
+const HEADER_TIMEOUT_MS = 20000;
+
 function fetchUpstream(targetUrl, headers, depth = 0) {
   return new Promise((resolve, reject) => {
     if (depth > MAX_REDIRECTS) return reject(new Error('too_many_redirects'));
     let u;
     try { u = new URL(targetUrl); } catch { return reject(new Error('bad_url')); }
     const mod = u.protocol === 'http:' ? http : https;
+
+    let settled = false;
+    const guard = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      req.destroy();
+      reject(new Error('upstream_timeout'));
+    }, HEADER_TIMEOUT_MS);
+    guard.unref?.();
+
     const req = mod.request(u, { method: 'GET', headers }, res => {
+      // 헤더가 왔으면 감시 종료. 여기서 안 끄면 본문 스트리밍 중 유휴에도 터진다(위 주석 참고).
+      clearTimeout(guard);
+      if (settled) { res.resume(); return; } // 타임아웃이 먼저 터진 뒤 도착한 응답은 버린다
+      settled = true;
+
       // googlevideo는 리다이렉트를 자주 준다. 폰에게 리다이렉트를 그대로 넘기면 폰이
       // googlevideo 주소를 직접 보게 되므로(=은닉 실패 + 서명 IP 불일치로 403), 반드시
       // 서버가 따라간다.
@@ -89,8 +122,12 @@ function fetchUpstream(targetUrl, headers, depth = 0) {
       }
       resolve(res);
     });
-    req.on('error', () => reject(new Error('upstream_error')));
-    req.setTimeout(20000, () => { req.destroy(); reject(new Error('upstream_timeout')); });
+    req.on('error', () => {
+      clearTimeout(guard);
+      if (settled) return; // 본문 도중 끊긴 건 여기서 reject할 대상이 아니다(이미 resolve됨)
+      settled = true;
+      reject(new Error('upstream_error'));
+    });
     req.end();
   });
 }

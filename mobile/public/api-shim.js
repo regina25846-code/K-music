@@ -15,6 +15,25 @@
 
   const RPC_URL = '/api/rpc';
 
+  // 폰에서는 fetch가 "실패"하는 대신 "영원히 안 끝나는" 경우가 실제로 생긴다(화면 끄는 순간
+  // 와이파이↔LTE가 바뀌거나 절전으로 라디오가 내려가면, 이미 나가 있던 요청이 거절도 응답도
+  // 없이 매달려 있는다). 그런데 app.js의 큐 보충(maybeExtendQueue)은 extendingQueue 플래그를
+  // finally에서만 내리기 때문에, 요청 하나가 영영 안 끝나면 그 플래그가 true로 굳어서
+  // 그 뒤로는 자동추천 채워넣기가 통째로 죽는다. 그래서 시임 단계에서 상한을 건다.
+  // 서버 쪽 최장 작업이 yt-dlp(30초 상한)라서 60초면 정상 요청을 자를 위험이 없다.
+  const RPC_TIMEOUT_MS = 60000;
+
+  function timeoutSignal() {
+    try {
+      if (typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function') {
+        return AbortSignal.timeout(RPC_TIMEOUT_MS);
+      }
+      const ac = new AbortController();
+      setTimeout(() => { try { ac.abort(); } catch {} }, RPC_TIMEOUT_MS);
+      return ac.signal;
+    } catch { return undefined; }
+  }
+
   async function rpc(method, ...args) {
     let res;
     try {
@@ -22,6 +41,7 @@
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'same-origin',
+        signal: timeoutSignal(),
         body: JSON.stringify({ method, args })
       });
     } catch (e) {
@@ -61,7 +81,14 @@
   window.api = {
     // ── 서버가 실제로 처리하는 것들 ───────────────────────────────────────────
     getConfig: () => rpc('getConfig'),
-    saveConfig: (cfg) => rpc('saveConfig', cfg),
+    // ⚠️ saveConfig는 절대 예외를 던지면 안 된다(2026-08-18).
+    // app.js의 playTrack()은 재생을 시작한 "뒤" try 블록 안에서 await saveCfg(...)를 부른다.
+    // 즉 소리는 이미 잘 나고 있는데 이 설정 저장 한 번이 네트워크 문제로 실패하면, 그 예외가
+    // 재생 실패 catch로 떨어져서 자동추천곡을 멀쩡한 채로 건너뛰고(skipChain), 3번 반복되면
+    // "재생 실패" 토스트와 함께 정지한다. 데스크톱은 IPC라 이런 실패가 없어서 안 드러났다.
+    // 저장 실패는 마지막 재생위치가 조금 옛날 값으로 남는 정도의 문제라, 조용히 삼키는 쪽이
+    // 항상 낫다(다음 저장이 5초 뒤에 또 온다).
+    saveConfig: soft('saveConfig', { ok: false }),
     getPlaylists: () => rpc('getPlaylists'),
     savePlaylists: (pl) => rpc('savePlaylists', pl),
 
@@ -86,6 +113,11 @@
       // 추천이 실패해도 재생 자체는 계속돼야 한다(데스크톱도 같은 규약: 실패 시 빈 배열).
       try { return await rpc('getRecommendations', seedYtUrl, excludeIds, count); }
       catch { return []; }
+    },
+    getAnchorSeed: async (excludeItems, currentSeedId) => {
+      // 못 고르면 null — 렌더러는 예전처럼 지금 재생 중인 곡을 시드로 쓴다(데스크톱과 같은 규약).
+      try { return await rpc('getAnchorSeed', excludeItems, currentSeedId); }
+      catch { return null; }
     },
     recordPlayEvent: async (ytUrl, meta, eventType) => {
       // 통계 기록이 실패했다고 재생을 방해하면 안 된다 — 조용히 삼킨다.
