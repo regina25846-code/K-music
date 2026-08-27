@@ -5,7 +5,13 @@ const fs = require('fs');
 const crypto = require('crypto');
 const { execFile, spawn } = require('child_process');
 
-const DATA_DIR = path.join(app.getPath('userData'), 'kris-music');
+// ⚠ 2026-08-28 이전엔 DATA_DIR이 userData 아래에 'kris-music'을 한 번 더 붙여서
+// %APPDATA%\kris-music\kris-music\ 라는 2중 중첩이 났다(당시 app.getName()도 'kris-music'
+// 이었으므로 그 자체가 첫 번째 'kris-music'). package.json에 top-level productName:
+// "K-Music"을 추가해 Electron이 계산하는 userData 폴더 자체가 K-Music으로 바뀌는
+// 김에, 여기서도 하드코딩된 하위 폴더 join을 없애 1중으로 평탄화한다. 구 데이터
+// 이관은 아래 migrateLegacyUserData()가 담당(★ 2중 중첩 구조를 그대로 안다).
+const DATA_DIR = app.getPath('userData');
 const CONFIG_FILE = path.join(DATA_DIR, 'config.json');
 const PLAYLISTS_FILE = path.join(DATA_DIR, 'playlists.json');
 const LYRICS_CACHE_FILE = path.join(DATA_DIR, 'lyrics-cache.json');
@@ -1375,6 +1381,116 @@ function createMainWindow() {
   });
 }
 
+// ── userData 이사 (구 kris-music\kris-music 2중중첩 → 신 K-Music 1중, 2026-08-28) ──
+// K-Tube에서 검증된 패턴(`kris_tube/main.js`의 migrateLegacyUserData, 오푸스 최종검토
+// 통과)을 그대로 따르되, K-Music은 두 개의 구 경로를 합쳐야 한다는 점이 다르다.
+//
+//  1) LEGACY_ROOT = %APPDATA%\kris-music
+//     — 예전 app.getName()('kris-music')이 만들던 Electron 기본 userData 폴더.
+//       Cookies/Local Storage/Preferences(크로미움 세션)와 bin\yt-dlp.exe override
+//       (userData 루트 기준, main.js의 getYtDlpOverridePath와 동일 층)가 여기 있었다.
+//  2) LEGACY_DATA_DIR = LEGACY_ROOT\kris-music
+//     — main.js가 자체적으로 하드코딩해 한 번 더 감쌌던 하위 폴더(옛 DATA_DIR).
+//       config.json/playlists.json/accounts.json/lyrics-cache.json/history/ 가 여기 있었다.
+//
+// 신규 DATA_DIR은 위에서 app.getPath('userData')로 평탄화했으므로, 이 두 구 경로에서
+// 온 파일이 전부 신규 userData 루트(K-Music\) 하나로 합쳐진다.
+//
+// ⚠ 옮기지 않고 '복사'한다(rename 금지) — 실패해도 구 폴더가 그대로 남아 되돌릴 수 있다.
+//   새 폴더에 이미 같은 이름의 파일이 있으면 절대 덮어쓰지 않고 skip(파일 단위 멱등).
+// ⚠ 캐시류(Cache/Code Cache/GPUCache/Dawn*Cache/blob_storage/Shared Dictionary/
+//   Trust Tokens/Singleton*/DevToolsActivePort)는 아래 화이트리스트에 없으므로 자동
+//   제외된다 — 통째로 복사하면 Cache 하나만 88MB라 첫 실행이 오래 걸릴 수 있다.
+const LEGACY_USERDATA_DIR = 'kris-music';       // LEGACY_ROOT 폴더명
+const LEGACY_DATA_SUBDIR = 'kris-music';        // LEGACY_ROOT 안의 옛 DATA_DIR 하위 폴더명
+// LEGACY_ROOT 바로 아래(userData 루트 층) 단일 파일 — 크로미움 세션 + yt-dlp override
+const MIGRATE_ROOT_FILES = ['Cookies', 'Preferences'];
+const MIGRATE_ROOT_NESTED_FILES = [['bin', 'yt-dlp.exe']];
+const MIGRATE_ROOT_DIRS = ['Local Storage'];
+// LEGACY_DATA_DIR(옛 2중중첩 하위 폴더) 바로 아래 — 앱 자체 데이터
+const MIGRATE_DATA_FILES = ['config.json', 'playlists.json', 'accounts.json', 'lyrics-cache.json'];
+const MIGRATE_DATA_DIRS = ['history'];
+
+// 반환값 = 실제로 새로 복사한 파일 개수(재기동 시 "복사함" 로그가 매번 찍히는 걸 막기 위함)
+function copyDirRecursiveSkipExisting(srcDir, dstDir) {
+  fs.mkdirSync(dstDir, { recursive: true });
+  let copied = 0;
+  for (const entry of fs.readdirSync(srcDir, { withFileTypes: true })) {
+    const src = path.join(srcDir, entry.name);
+    const dst = path.join(dstDir, entry.name);
+    if (entry.isDirectory()) {
+      copied += copyDirRecursiveSkipExisting(src, dst);
+    } else if (entry.isFile()) {
+      if (fs.existsSync(dst)) continue; // 멱등 — 새 쪽에 이미 있으면 안 건드림
+      fs.copyFileSync(src, dst);
+      copied++;
+    }
+  }
+  return copied;
+}
+
+function migrateFileList(srcRoot, dstRoot, files, tag) {
+  for (const f of files) {
+    const src = path.join(srcRoot, f);
+    const dst = path.join(dstRoot, f);
+    if (!fs.existsSync(src) || fs.existsSync(dst)) continue;
+    try {
+      fs.copyFileSync(src, dst);
+      console.log('[kmusic] 이전 설정 폴더에서 복사:', tag ? `${tag}/${f}` : f);
+    } catch (e) { console.error('[kmusic] 파일 복사 실패(무시):', f, e.message); }
+  }
+}
+
+function migrateNestedFileList(srcRoot, dstRoot, nestedList) {
+  for (const nested of nestedList) {
+    const src = path.join(srcRoot, ...nested);
+    const dst = path.join(dstRoot, ...nested);
+    if (!fs.existsSync(src) || fs.existsSync(dst)) continue;
+    try {
+      fs.mkdirSync(path.dirname(dst), { recursive: true });
+      fs.copyFileSync(src, dst);
+      console.log('[kmusic] 이전 설정 폴더에서 복사:', nested.join('/'));
+    } catch (e) { console.error('[kmusic] 파일 복사 실패(무시):', nested.join('/'), e.message); }
+  }
+}
+
+function migrateDirList(srcRoot, dstRoot, dirs) {
+  for (const d of dirs) {
+    const src = path.join(srcRoot, d);
+    const dst = path.join(dstRoot, d);
+    if (!fs.existsSync(src)) continue;
+    try {
+      const n = copyDirRecursiveSkipExisting(src, dst);
+      if (n > 0) console.log('[kmusic] 이전 설정 폴더에서 복사:', d + '/', `(${n}개 파일)`);
+    } catch (e) { console.error('[kmusic] 폴더 복사 실패(무시):', d, e.message); }
+  }
+}
+
+function migrateLegacyUserData() {
+  try {
+    const target = DATA_DIR; // = app.getPath('userData'), 이미 평탄화됨
+    const parent = path.dirname(target);
+    const legacyRoot = path.join(parent, LEGACY_USERDATA_DIR);
+    if (legacyRoot === target || !fs.existsSync(legacyRoot)) return; // 구 폴더 자체가 없으면 할 일 없음
+    fs.mkdirSync(target, { recursive: true });
+
+    // 1) 구 userData 루트(kris-music\) 층 — 크로미움 세션 + yt-dlp override
+    migrateFileList(legacyRoot, target, MIGRATE_ROOT_FILES);
+    migrateNestedFileList(legacyRoot, target, MIGRATE_ROOT_NESTED_FILES);
+    migrateDirList(legacyRoot, target, MIGRATE_ROOT_DIRS);
+
+    // 2) 구 2중중첩 하위 폴더(kris-music\kris-music\) 층 — 앱 자체 데이터
+    const legacyDataDir = path.join(legacyRoot, LEGACY_DATA_SUBDIR);
+    if (fs.existsSync(legacyDataDir)) {
+      migrateFileList(legacyDataDir, target, MIGRATE_DATA_FILES, LEGACY_DATA_SUBDIR);
+      migrateDirList(legacyDataDir, target, MIGRATE_DATA_DIRS);
+    }
+  } catch (e) {
+    // 실패해도 앱은 그냥 기본값으로 시작한다 — 구 폴더는 손대지 않았으므로 복구 가능.
+    console.error('[kmusic] userData 이사 실패(무시):', e.message);
+  }
+}
+
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
   app.quit();
@@ -1387,6 +1503,7 @@ if (!gotLock) {
     }
   });
   app.whenReady().then(() => {
+    migrateLegacyUserData();   // ★ 어떤 설정도 읽기 전에 먼저 — loadConfig() 등은 createMainWindow 안에서 처음 불림
     createMainWindow();
     createTray();
     createTabWindow();

@@ -63,6 +63,10 @@
     ; 제거 시 설정/캐시(가사 캐시, 플레이리스트 등) 삭제 여부를 물어봄 — 기본은 "삭제 안 함"
     ; (IDNO를 기본 포커스로 — 실수로 소중한 플레이리스트가 날아가는 걸 막기 위함)
     MessageBox MB_YESNO|MB_ICONQUESTION|MB_DEFBUTTON2 "설치 대상과 애플리케이션 데이터(설정, 재생목록, 가사 캐시)도 함께 삭제하시겠습니까?" IDNO keepdata
+    ; 2026-08-28 userData 폴더명 kris-music\kris-music(2중중첩) → K-Music(1중) 개명 —
+    ; 구 경로는 RMDir /r 한 번으로 내부의 옛 kris-music 하위폴더까지 재귀 삭제되므로 별도 처리 불필요.
+    ; "데이터도 삭제"를 선택하면 신/구 폴더 둘 다 지워야 새 폴더가 살아남는 사고가 안 난다.
     RMDir /r "$APPDATA\kris-music"
+    RMDir /r "$APPDATA\K-Music"
   keepdata:
 !macroend
