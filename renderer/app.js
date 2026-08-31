@@ -80,6 +80,10 @@ function videoIdFromUrl(url) {
 function addManualTrack(plIdx, trackData, { autoplayNow = false } = {}) {
   const tracks = playlists[plIdx].tracks;
   const track = { ...trackData, source: 'manual' };
+  // 바로 재생하지 않고 담아두기만 하는 곡은 스트림 주소를 미리 받아둔다(선행 워밍) —
+  // 나중에 그 곡을 누르는 순간 로딩 없이 시작되게. 즉시재생(autoplayNow)은 playTrack이
+  // 어차피 지금 바로 받아오므로 이중 스폰을 피해 건너뛴다.
+  if (!autoplayNow) prefetchStream(track.ytUrl);
   if (autoplayNow && plIdx === playingPl && currentTrack >= 0) {
     let i = tracks.length - 1;
     while (i > currentTrack && (tracks[i].source || 'manual') === 'auto') { tracks.splice(i, 1); i--; }
@@ -207,6 +211,9 @@ async function maybeExtendQueue(plIdx) {
     recs.forEach(r => curTracks.push({ ytUrl: r.ytUrl, title: r.title, channel: r.channel, thumbnail: r.thumbnail, duration: r.duration, releaseYear: r.releaseYear, source: 'auto' }));
     await save();
     if (curView === 'home' && currentPl === plIdx) renderTrackList();
+    // 방금 꼬리에 붙은 자동추천곡 중 "다음에 나올" 곡을 미리 받아둔다 — 큐가 방금
+    // 생성/보충된 직후가 프리페치 최적 타이밍(형 요청, 2026-08-31 선행 워밍).
+    warmQueueHead();
   } catch {
     // 네트워크 실패 등은 조용히 무시 — 다음 곡 넘어갈 때 다시 시도됨
   } finally {
@@ -433,6 +440,107 @@ async function getStream(ytUrl, force = false) {
   streamCache[ytUrl] = { url: res.streamUrl, expireTs: now + 5.5*3600*1000 };
   return res.streamUrl;
 }
+
+// ── 스트림 프리페치(선행 워밍) ─────────────────────────────────────────────────
+// 2026-08-31 이식. 모바일 웹앱이 이미 검증해 둔 선행 워밍 방식을 데스크톱에도 적용한다 —
+// 원리는 동일: "다음에 재생될 곡"의 스트림 주소를 재생 전에 미리 받아 streamCache에
+// 넣어두면, 곡이 넘어가는 순간 playTrack의 getStream이 캐시 히트(모바일 실측 0ms)로 끝나서
+// 곡간 로딩 지연이 사라진다. 지연의 정체는 yt-dlp 프로세스 스폰+추출(형 실기 체감 2~3초,
+// 맥미니 실측 10초)이라, 이걸 재생 중인 배경 시간으로 옮기는 것이 핵심이다.
+//
+// 여기에 형 요청(2026-08-31)으로 한 가지를 더 한다: 큐가 새로 만들어진 직후(앱 시작 직후,
+// 곡을 직접 추가한 직후, 자동추천이 꼬리에 붙은 직후)에는 아직 아무것도 재생 전이라도
+// 앞쪽 곡 몇 개를 미리 받아둔다 — "첫 곡을 누르는 순간"의 로딩까지 없애기 위함.
+//
+// ⚠️ 모바일 게이트(2026-08-31 오푸스 최종검토 배포차단 이슈 후속조치): 모바일 웹앱은
+// app.js를 한 글자도 안 고치고 그대로 서빙하면서 이미 자기 전용 프리페처(mobile/public/
+// 아래의 모바일 전용 스크립트, app.js 로드 뒤에 주입됨)를 따로 갖고 있다. 여기서 걸러내지
+// 않으면 곡 전환마다 두 시스템이 서로 모르는 채 같은 스트림 주소를 각각 요청해서 yt-dlp가
+// 2개씩 뜬다(mobile/check_mobile.js가 정적 검사로 이 중복을 감지). app.js는 모바일 전용
+// API를 직접 참조하지 않고, mobile.css 스코프에도 쓰이는 <html class="m"> DOM 마커(서버가
+// 모바일 요청에만 붙여준다, mobile/lib/mobilehtml.js)만 재사용해서 아래 prefetchStream
+// 진입점 한 곳에서만 판단한다 — 데스크톱은 그 클래스가 없으니 평소처럼 그대로 동작한다.
+//
+// 설계 원칙:
+//  - 프리페치는 전부 직렬(한 번에 yt-dlp 1개)로 돌린다. 병렬 스폰은 프로세스 기동 비용이
+//    커서(맥 실측 8초/회) 오히려 서로 느려지는 걸 K-Music 조회수 조회 때 이미 실측했다
+//    (main.js fetchViewCounts 주석의 "3개 동시 요청 시 개당 23~25초" 참고).
+//  - 실패는 조용히 무시 — 프리페치가 안 됐으면 재생 시점에 기존 로딩 경로가 그대로 돈다.
+//  - 셔플은 다음 곡이 난수라 예측 불가, 한곡반복은 같은 주소 재사용이라 프리페치 불필요
+//    (모바일 쪽과 같은 한계/판단).
+const PREFETCH_LEAD_SEC = 30; // 곡 끝 30초 전에 한 번 더 확인(그 사이 큐가 바뀌었을 수 있음)
+const WARM_HEAD_COUNT = 3;    // 재생 전 선행 워밍으로 미리 받아둘 곡 수 — 시드곡 추가 시
+                              // 큐에 한 번에 3곡이 들어오는데 2로는 3번째 곡에서 버퍼링이
+                              // 남는 걸 형이 실기로 확인해서 3으로 확대(2026-08-31, 직렬 유지)
+
+let prefetchChain = Promise.resolve();     // 직렬화 체인
+const prefetchInFlight = new Set();        // 같은 곡 중복 예약 방지
+
+function cachedStreamAlive(ytUrl) {
+  const c = streamCache[ytUrl];
+  return !!(c && c.expireTs > Date.now() + 60000); // getStream의 "1분 이상 남아야 히트" 기준과 동일
+}
+
+// 데스크톱 전용 게이트 — 위 "모바일 게이트" 주석 참고.
+function isMobilePage() {
+  return document.documentElement.classList.contains('m');
+}
+
+function prefetchStream(ytUrl) {
+  if (isMobilePage()) return; // 모바일은 자기 전용 프리페처가 따로 처리한다
+  if (!ytUrl || cachedStreamAlive(ytUrl) || prefetchInFlight.has(ytUrl)) return;
+  prefetchInFlight.add(ytUrl);
+  prefetchChain = prefetchChain.then(async () => {
+    try {
+      if (cachedStreamAlive(ytUrl)) return; // 대기 중에 playTrack이 이미 받아뒀으면 스킵
+      await getStream(ytUrl); // 성공하면 getStream이 알아서 streamCache에 넣는다
+    } catch { /* 실패는 재생 시점의 기존 재시도 경로가 처리 */ }
+    finally { prefetchInFlight.delete(ytUrl); }
+  });
+}
+
+// nextTrack()이 고를 다음 곡을 그대로 예측(app.js nextTrack의 규칙과 반드시 일치해야 함)
+function predictNextYtUrl() {
+  if (playingPl < 0 || currentTrack < 0) return null;
+  const tracks = playlists[playingPl]?.tracks;
+  if (!tracks || !tracks.length) return null;
+  if (shuffle || repeatMode === 2) return null;
+  if (repeatMode === 0 && currentTrack === tracks.length - 1) return null; // 끝 곡이면 안 넘어감
+  return tracks[(currentTrack + 1) % tracks.length]?.ytUrl || null;
+}
+
+function prefetchUpcoming() { prefetchStream(predictNextYtUrl()); }
+
+// 큐 앞쪽 선행 워밍 — 재생 중이면 "현재 곡 다음"부터, 재생 전이면 "누를 가능성이 높은 곳"
+// (이어듣기 저장 위치가 있으면 거기, 없으면 목록 맨 앞)부터 n곡.
+function warmQueueHead(n = WARM_HEAD_COUNT) {
+  let tracks, from;
+  if (playingPl >= 0 && currentTrack >= 0 && playlists[playingPl]?.tracks) {
+    tracks = playlists[playingPl].tracks;
+    from = currentTrack + 1;
+  } else {
+    tracks = playlists[currentPl]?.tracks || [];
+    const li = config.lastTrackIdx;
+    from = (config.resume && typeof li === 'number' && li >= 0 && tracks[li]) ? li : 0;
+  }
+  for (let i = from, c = 0; i < tracks.length && c < n; i++, c++) {
+    prefetchStream(tracks[i]?.ytUrl);
+  }
+}
+
+// 언제 부르는가 — 타이머가 아니라 미디어 이벤트에 얹는다(모바일 쪽과 동일한 방식).
+audio.addEventListener('loadedmetadata', () => { prefetchUpcoming(); }); // 곡이 시작하자마자
+audio.addEventListener('playing', () => { prefetchUpcoming(); });
+let _prefetchLeadKey = '';
+audio.addEventListener('timeupdate', () => {
+  const d = audio.duration;
+  if (!isFinite(d) || d <= 0) return;
+  if (d - audio.currentTime > PREFETCH_LEAD_SEC) return;
+  const key = playingPl + ':' + currentTrack;
+  if (_prefetchLeadKey === key) return;
+  _prefetchLeadKey = key;
+  prefetchUpcoming();
+});
 
 // ── persist ───────────────────────────────────────────────────────────────────
 async function save() { await window.api.savePlaylists(playlists); }
@@ -973,8 +1081,11 @@ async function playTrack(idx, plIdx = currentPl, resumeSec = 0, skipChain = 0) {
   const myGen = ++playGen; // 이 재생 시도 고유 번호 — 아래서 재시도 대기 후 깨어날 때마다 재확인
 
   // 직전 곡의 완주/스킵을 기록(재정렬 알고리즘의 핵심 신호). resumeSec>0인 이어듣기 재시작
-  // 케이스는 currentTrack===idx라서 아래 조건에서 자연히 제외됨.
-  if (playingPl >= 0 && playlists[playingPl]?.tracks[currentTrack] && (playingPl !== plIdx || currentTrack !== idx)) {
+  // 케이스는 currentTrack===idx이고 wasNaturalEnd도 false라서 아래 조건에서 자연히 제외됨.
+  // wasNaturalEnd 항을 추가한 이유(2026-08-31): 전체반복 + 곡 1개(또는 순환해서 같은 곡으로
+  // 재진입)일 때 "다음 곡 == 지금 곡"이라 인덱스 비교만으론 항상 거짓이 되어, 곡이 끝까지
+  // 재생됐는데도 완주(complete) 기록이 영영 안 쌓이는 구멍이 있었다.
+  if (playingPl >= 0 && playlists[playingPl]?.tracks[currentTrack] && (wasNaturalEnd || playingPl !== plIdx || currentTrack !== idx)) {
     const prevT = playlists[playingPl].tracks[currentTrack];
     const listenedSec = audio.currentTime || 0;
     window.api.recordPlayEvent(prevT.ytUrl, { title: prevT.title, channel: prevT.channel, duration: prevT.duration, releaseYear: prevT.releaseYear, listenedSec }, wasNaturalEnd ? 'complete' : 'skip');
@@ -1053,13 +1164,42 @@ async function playTrack(idx, plIdx = currentPl, resumeSec = 0, skipChain = 0) {
     // — 자동 스킵 경로에서는 반복모드를 무시하고 항상 진짜 다음 곡으로 넘어간다.
     if ((e.code === 'UNSUPPORTED_LIVE_SOURCE' || t.source === 'auto') && skipChain < AUTO_SKIP_CHAIN_MAX) {
       toast('"'+t.title+'" 곡을 재생할 수 없어 다음 곡으로 넘어갈게요');
-      const n = shuffle ? Math.floor(Math.random()*tracks.length) : (idx+1)%tracks.length;
+      // ── 재생시간 오집계 방지(2026-08-22 발견 버그의 자동스킵 경로 수정, 2026-08-31) ──
+      // 여기서 그냥 playTrack(n)으로 넘어가면, 다음 playTrack 상단의 "직전 곡 기록"이
+      // 이 실패한 곡(currentTrack=idx)에 대해 audio.currentTime을 listenedSec으로 기록하는데,
+      // 스트림을 아예 못 받은 실패라 audio에는 그 앞 곡의 재생위치가 그대로 남아있다 —
+      // 즉 앞 곡의 재생시간이 "재생된 적도 없는 실패 곡"에 집계됐다. 실패 곡의 기록(스킵,
+      // 0초)은 여기서 직접 남기고, playingPl을 잠깐 내려서 다음 playTrack의 상단 기록을
+      // 건너뛰게 한다(앞 곡의 실제 재생시간은 이 실패 곡의 playTrack이 시작될 때 이미
+      // 올바르게 기록됐으므로 여기서 잃는 기록은 없다).
+      window.api.recordPlayEvent(t.ytUrl, { title: t.title, channel: t.channel, duration: t.duration, releaseYear: t.releaseYear, listenedSec: 0 }, 'skip');
+      playingPl = -1;
+      const n = shuffle ? pickShuffleIndex(tracks.length, idx) : (idx+1)%tracks.length;
       playTrack(n, plIdx, 0, skipChain+1);
       return;
     }
     toast('재생 실패: '+e.message);
     isPlaying=false; setPlayIcon(false);
     currentTrack = prev; playingPl = prevPl;
+    // 헤더 UI(제목/채널/아트/총시간)도 같이 원복(2026-08-31) — 예전엔 인덱스만 되돌리고
+    // 화면 상단은 실패한 곡의 제목/아트가 그대로 남아서, 목록 하이라이트(이전 곡)와 상단
+    // 표기(실패 곡)가 어긋난 상태로 지속됐다.
+    const pt = prevPl >= 0 ? playlists[prevPl]?.tracks?.[prev] : null;
+    if (pt) {
+      trackTitle.textContent = pt.title;
+      trackCh.textContent = pt.channel;
+      albumArt.src = pt.thumbnail || BLANK_PX;
+      albumArt.classList.toggle('default', !pt.thumbnail);
+      updateGlowFromArt(pt.thumbnail || '');
+      tTot.textContent = fmt(pt.duration);
+    } else {
+      trackTitle.textContent = '재생 중인 곡 없음';
+      trackCh.textContent = '—';
+      albumArt.src = BLANK_PX;
+      albumArt.classList.add('default');
+      updateGlowFromArt(null);
+      tTot.textContent = fmt(0);
+    }
   } finally { if (myGen === playGen) { hideLoad(); renderTrackList(); } }
 }
 
@@ -1297,13 +1437,21 @@ async function togglePlay() {
   renderTrackList();
 }
 
+// 셔플에서 "현재 곡 인덱스만 뺀" 난수 뽑기 — 예전엔 Math.random이 현재 곡을 다시 뽑아
+// 같은 곡이 연달아 나올 수 있었다(2026-08-31 점검에서 발견). 곡이 1개뿐이면 그 곡뿐이다.
+function pickShuffleIndex(len, exclude) {
+  if (len <= 1) return 0;
+  const r = Math.floor(Math.random() * (len - 1));
+  return r >= exclude ? r + 1 : r;
+}
+
 function nextTrack() {
   if (playingPl<0) return;
   const tracks = playlists[playingPl].tracks;
   if (!tracks.length) return;
   let n;
   if (repeatMode===2) n=currentTrack;
-  else if (shuffle) n=Math.floor(Math.random()*tracks.length);
+  else if (shuffle) n=pickShuffleIndex(tracks.length, currentTrack);
   else n=(currentTrack+1)%tracks.length;
   playTrack(n, playingPl);
 }
@@ -1649,4 +1797,10 @@ $('btn-pin').onclick = async function() {
 
   const ytc = await window.api.checkYtdlp();
   if (!ytc.ok) toast('yt-dlp를 찾을 수 없습니다');
+
+  // 시작 직후 선행 워밍 — 형이 첫 곡을 누르기 전에 앞쪽 곡의 스트림 주소를 미리 받아둔다.
+  // 3초 지연을 두는 이유: 이어듣기 자동재생(playTrack)이 지금 자기 곡을 받아오는 중일 수
+  // 있는데, 같은 타이밍에 워밍까지 스폰하면 yt-dlp 2개가 동시에 돌아 첫 재생이 오히려
+  // 늦어진다. 자동재생의 첫 로딩이 끝날 시간을 주고 시작한다.
+  setTimeout(() => warmQueueHead(), 3000);
 })();

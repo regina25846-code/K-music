@@ -1,0 +1,45 @@
+<svg viewBox="0 0 96 96" xmlns="http://www.w3.org/2000/svg" role="img" aria-hidden="true">
+<defs>
+<linearGradient id="gmusic" x1="14" y1="6" x2="82" y2="92" gradientUnits="userSpaceOnUse">
+<stop offset="0" stop-color="#F385A3"/><stop offset="1" stop-color="#8B1D50"/>
+</linearGradient>
+<linearGradient id="smusic" x1="48" y1="4" x2="48" y2="58" gradientUnits="userSpaceOnUse">
+<stop offset="0" stop-color="#fff" stop-opacity=".40"/><stop offset="1" stop-color="#fff" stop-opacity="0"/>
+</linearGradient>
+<radialGradient id="bmusic" cx="0" cy="0" r="1" gradientTransform="translate(26 20) rotate(52) scale(58 46)" gradientUnits="userSpaceOnUse">
+<stop offset="0" stop-color="#fff" stop-opacity=".38"/><stop offset="1" stop-color="#fff" stop-opacity="0"/>
+</radialGradient>
+<clipPath id="kbcmusic"><rect x="4" y="4" width="88" height="88" rx="25"/></clipPath>
+<radialGradient id="kbsmusic" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(71.4 72.8) scale(22.5)">
+<stop offset=".62" stop-color="#000" stop-opacity=".26"/><stop offset=".8" stop-color="#000" stop-opacity=".11"/><stop offset="1" stop-color="#000" stop-opacity="0"/>
+</radialGradient>
+<linearGradient id="kbfmusic" x1="71.4" y1="54.04" x2="71.4" y2="88.76" gradientUnits="userSpaceOnUse">
+<stop offset="0" stop-color="#CC2A73"/><stop offset="1" stop-color="#691039"/>
+</linearGradient>
+<linearGradient id="kbrmusic" x1="59" y1="59" x2="84" y2="84" gradientUnits="userSpaceOnUse">
+<stop offset="0" stop-color="#fff" stop-opacity=".97"/><stop offset="1" stop-color="#fff" stop-opacity=".74"/>
+</linearGradient>
+<linearGradient id="kbgmusic" x1="71.4" y1="56.79" x2="71.4" y2="86.01" gradientUnits="userSpaceOnUse">
+<stop offset="0" stop-color="#fff" stop-opacity=".32"/><stop offset=".58" stop-color="#fff" stop-opacity="0"/>
+</linearGradient>
+</defs>
+<rect x="4" y="4" width="88" height="88" rx="25" fill="url(#gmusic)"/>
+<rect x="4" y="4" width="88" height="88" rx="25" fill="url(#bmusic)"/>
+<path d="M4 29C4 15.2 15.2 4 29 4h38c13.8 0 25 11.2 25 25v9c-16 8-30.7 11.6-44 11.6S22.5 45.4 4 34.6V29Z" fill="url(#smusic)"/>
+<g fill="#fff">
+<rect x="23.99" y="42.94" width="6.40" height="12.19" rx="3.20" fill-opacity=".60"/>
+<rect x="34.39" y="34.88" width="6.40" height="28.12" rx="3.20" fill-opacity=".82"/>
+<rect x="44.80" y="25.88" width="6.40" height="46.12" rx="3.20" fill-opacity=".97"/>
+<rect x="55.21" y="33.00" width="6.40" height="31.50" rx="3.20" fill-opacity=".82"/>
+<rect x="65.61" y="40.88" width="6.40" height="15.84" rx="3.20" fill-opacity=".60"/>
+</g>
+<g clip-path="url(#kbcmusic)"><circle cx="71.4" cy="72.8" r="22.5" fill="url(#kbsmusic)"/></g>
+<circle cx="71.4" cy="71.4" r="15.985" fill="url(#kbfmusic)" stroke="url(#kbrmusic)" stroke-width="2.75"/>
+<circle cx="71.4" cy="71.4" r="14.61" fill="url(#kbgmusic)"/>
+<circle cx="71.4" cy="71.4" r="17.72" fill="none" stroke="#000" stroke-opacity=".12" stroke-width=".7"/>
+<g fill="none" stroke="#fff" stroke-opacity=".97" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">
+<path d="M67.35 65.15V77.65"/><path d="M75.45 65.15L68.65 71.4L75.45 77.65"/>
+</g>
+<rect x="4.75" y="4.75" width="86.5" height="86.5" rx="24.25" fill="none" stroke="#fff" stroke-opacity=".34" stroke-width="1.5"/>
+<rect x="4.25" y="4.25" width="87.5" height="87.5" rx="24.75" fill="none" stroke="#000" stroke-opacity=".16" stroke-width=".5"/>
+</svg>

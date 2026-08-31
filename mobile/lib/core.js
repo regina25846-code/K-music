@@ -118,7 +118,10 @@ function loadLyricsCache() {
   try { return JSON.parse(fs.readFileSync(LYRICS_CACHE_FILE, 'utf8')); } catch { return {}; }
 }
 function saveLyricsCache(c) {
-  fs.writeFileSync(LYRICS_CACHE_FILE, JSON.stringify(c, null, 2));
+  // 2026-08-16에 config/playlists를 writeJsonAtomic으로 바꿀 때 여기만 누락돼 있었다
+  // (2026-08-31 점검에서 발견) — 쓰는 도중 강제종료되면 캐시 파일이 반쪽짜리가 돼서
+  // 다음 실행 때 파싱 실패로 캐시 전체가 무효화됐다. 다른 파일들과 동일하게 통일.
+  writeJsonAtomic(LYRICS_CACHE_FILE, c);
 }
 
 // ── 계정(로그인) ──────────────────────────────────────────────────────────────

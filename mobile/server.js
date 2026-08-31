@@ -501,7 +501,12 @@ async function handleRequest(req, res) {
     '/apple-touch-icon.png': 'apple-touch-icon.png',
     '/m/apple-touch-icon.png': 'apple-touch-icon.png',
     '/m/icon-192.png': 'icon-192.png',
-    '/m/icon-512.png': 'icon-512.png'
+    '/m/icon-512.png': 'icon-512.png',
+    // maskable(안드로이드 홈화면 전용) 아이콘도 반드시 여기 있어야 한다. 크롬은 manifest에
+    // 적힌 아이콘도 쿠키 없이 받아가기 때문에, 빠뜨리면 302(로그인)로 튕겨서 조용히 실패하고
+    // 예전처럼 잘린 아이콘이 그대로 남는다.
+    '/m/icon-192-maskable.png': 'icon-192-maskable.png',
+    '/m/icon-512-maskable.png': 'icon-512-maskable.png'
   };
   if (Object.prototype.hasOwnProperty.call(PUBLIC_PWA_FILES, pathname)) {
     return serveFile(res, path.join(PUBLIC_DIR, PUBLIC_PWA_FILES[pathname]));

@@ -43,7 +43,10 @@ function loadLyricsCache() {
   try { return JSON.parse(fs.readFileSync(LYRICS_CACHE_FILE, 'utf8')); } catch { return {}; }
 }
 function saveLyricsCache(c) {
-  fs.writeFileSync(LYRICS_CACHE_FILE, JSON.stringify(c, null, 2));
+  // 2026-08-16에 config/playlists를 writeJsonAtomic으로 바꿀 때 여기만 누락돼 있었다
+  // (2026-08-31 점검에서 발견) — 쓰는 도중 강제종료되면 캐시 파일이 반쪽짜리가 돼서
+  // 다음 실행 때 파싱 실패로 캐시 전체가 무효화됐다. 다른 파일들과 동일하게 통일.
+  writeJsonAtomic(LYRICS_CACHE_FILE, c);
 }
 
 // ── 계정(로그인) ──────────────────────────────────────────────────────────────
@@ -330,7 +333,12 @@ function getYtDlpPath() {
 function ytdlp(args) {
   return new Promise((resolve, reject) => {
     const bin = getYtDlpPath();
-    execFile(bin, args, { timeout: 30000 }, (err, stdout, stderr) => {
+    // maxBuffer 명시(2026-08-31): execFile 기본 상한은 1MB인데, --dump-json 출력이 곡당
+    // 620~630KB로 실측됨(자막 언어가 많은 영상은 1MB를 넘길 수 있음) — 넘는 순간
+    // "maxBuffer length exceeded"로 재생 실패가 난다. 모바일 생성기(build_core.js)와
+    // K-Tube는 이미 각각 32MB/20MB를 명시하고 있었는데 데스크톱만 누락돼 있었다.
+    // 모바일과 같은 32MB로 통일.
+    execFile(bin, args, { timeout: 30000, maxBuffer: 32 * 1024 * 1024 }, (err, stdout, stderr) => {
       if (err) return reject(new Error(stderr || err.message));
       resolve(stdout.trim());
     });

@@ -241,6 +241,75 @@ check('기본 바인드 주소가 루프백(실수로 외부 노출되지 않음
   return /KMUSIC_MOBILE_HOST \|\| '127\.0\.0\.1'/.test(src) || '기본값이 루프백이 아님';
 });
 
+// ── P. PWA 설치 규격 ──────────────────────────────────────────────────────────
+// 2026-08-31, 형이 폰에서 "설치"를 눌렀는데 한참 반응이 없다가 홈 화면에 아이콘이 여러 개
+// 중복으로 깔린 사고 뒤에 추가했다. 그때 확인한 함정들을 기계가 매번 다시 확인한다.
+let manifest = null;
+check('P1 manifest가 올바른 JSON', () => {
+  manifest = JSON.parse(read('mobile/public/manifest.webmanifest'));
+  return true;
+});
+
+if (manifest) {
+  // id가 없으면 브라우저가 start_url로 앱을 식별한다. start_url이 나중에 한 글자라도 바뀌면
+  // "같은 앱의 업데이트"가 아니라 "새로운 앱"으로 인식돼서 홈 화면 아이콘이 하나 더 생긴다.
+  // 명시해두면 start_url을 바꿔도 앱 정체성이 흔들리지 않는다.
+  check('P2 manifest에 id가 명시돼 있음(중복 설치 방지)', () =>
+    manifest.id === '/' || `id=${JSON.stringify(manifest.id)} (기대: "/")`);
+  check('P3 start_url/scope/display가 설치 요건을 만족', () =>
+    (manifest.start_url === '/' && manifest.scope === '/' && manifest.display === 'standalone') ||
+    `start_url=${manifest.start_url} scope=${manifest.scope} display=${manifest.display}`);
+  check('P4 name/short_name 있음', () =>
+    (!!manifest.name && !!manifest.short_name) || '비어 있음');
+
+  // 안드로이드 설치(WebAPK)는 any 192/512와 maskable 192/512를 전부 요구한다.
+  check('P5 아이콘 4종(any 192·512, maskable 192·512)이 다 있음', () => {
+    const want = [['192x192', 'any'], ['512x512', 'any'], ['192x192', 'maskable'], ['512x512', 'maskable']];
+    const missing = want.filter(([s, p]) =>
+      !(manifest.icons || []).some(i => i.sizes === s && String(i.purpose || 'any').split(/\s+/).includes(p)));
+    return missing.length === 0 || '없음: ' + missing.map(x => x.join(' ')).join(', ');
+  });
+
+  // 크롬은 manifest에 적힌 아이콘도 "쿠키 없이" 받아간다. 하나라도 PIN 세션 게이트 뒤에
+  // 있으면 302(로그인)로 튕겨서 조용히 실패하고, 설치가 정식 설치 대신 바로가기로 떨어진다.
+  check('P6 manifest의 모든 아이콘이 세션 없이 열려 있음(PUBLIC_PWA_FILES 등록)', () => {
+    const src = read('mobile/server.js');
+    const i = src.indexOf('const PUBLIC_PWA_FILES');
+    if (i < 0) return 'PUBLIC_PWA_FILES를 찾지 못함';
+    const block = src.slice(i, src.indexOf('};', i));
+    const missing = (manifest.icons || []).map(x => x.src)
+      .filter(s => !block.includes(`'${s}'`));
+    return missing.length === 0 || '세션 뒤에 갇힌 경로: ' + missing.join(', ');
+  });
+
+  check('P7 아이콘 파일이 실제로 존재하고 선언한 크기와 일치', () => {
+    const bad = [];
+    for (const ic of manifest.icons || []) {
+      const p = path.join(ROOT, 'mobile/public', ic.src.replace(/^\/m\//, '').replace(/^\//, ''));
+      if (!fs.existsSync(p)) { bad.push(`${ic.src} 파일 없음`); continue; }
+      // PNG 헤더(IHDR)에서 가로·세로·컬러타입을 직접 읽는다.
+      const b = fs.readFileSync(p);
+      if (b.slice(1, 4).toString() !== 'PNG') { bad.push(`${ic.src} PNG가 아님`); continue; }
+      const w = b.readUInt32BE(16), h = b.readUInt32BE(20), colorType = b[25];
+      if (`${w}x${h}` !== ic.sizes) bad.push(`${ic.src} 실제 ${w}x${h} ≠ 선언 ${ic.sizes}`);
+      if (colorType !== 6) bad.push(`${ic.src} RGBA가 아님(colorType=${colorType})`);
+    }
+    return bad.length === 0 || bad.join(', ');
+  });
+}
+
+// 서비스워커가 scope "/"에 등록돼 있어야 크롬이 정식 설치(WebAPK) 경로를 쓴다. 등록이 없으면
+// "바로가기 만들기"로 떨어지는데, 바로가기는 중복 방지가 없어서 누를 때마다 아이콘이 늘어난다.
+// start_url("/")이 로그인 전에는 login.html을 내려주므로 그쪽에도 반드시 등록이 있어야 한다.
+check('P8 로그인 화면에서도 서비스워커를 등록함', () =>
+  /navigator\.serviceWorker\.register\('\/sw\.js'\)/.test(read('mobile/public/login.html')) ||
+  'login.html에 등록 코드가 없음');
+check('P9 앱 화면에서도 서비스워커를 등록함', () =>
+  /navigator\.serviceWorker\.register\('\/sw\.js'\)/.test(read('mobile/public/mobile-boot.js')) ||
+  'mobile-boot.js에 등록 코드가 없음');
+check('P10 서비스워커에 fetch 핸들러가 있음(설치 가능 조건)', () =>
+  /addEventListener\('fetch'/.test(read('mobile/public/sw.js')) || 'fetch 핸들러가 없음');
+
 // ── 출력 ──────────────────────────────────────────────────────────────────────
 let fail = 0;
 for (const [ok, name, detail] of results) {

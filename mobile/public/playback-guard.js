@@ -134,23 +134,63 @@
     try { if (typeof maybeExtendQueue === 'function') maybeExtendQueue(s.pl); } catch {}
   }
 
+  // ⚠️ 30초 setInterval만으로는 부족하다(2026-08-31 수정) — 폰 브라우저는 백그라운드에서
+  // 타이머를 조여들게 하고(수 분까지), 그 상태에서는 이 안전망 자체가 안 돈다. 그래서
+  // gapless.js의 프리페치와 같은 수법으로 "재생 중인 오디오의 미디어 이벤트"에도 얹는다 —
+  // timeupdate는 백그라운드에서도 소리가 나는 동안 계속 발화하므로, 재생 중인 한 큐 점검이
+  // 반드시 주기적으로 돈다(이중화 — setInterval은 포그라운드용으로 그대로 둔다).
+  let lastQueueCheckAt = 0;
+  audio.addEventListener('timeupdate', () => {
+    const now = Date.now();
+    if (now - lastQueueCheckAt < QUEUE_CHECK_MS) return;
+    lastQueueCheckAt = now;
+    keepQueueFilled();
+  });
+
   // 재생목록 맨 끝 곡이 끝나면 app.js는 nextTrack을 부르지 않고 조용히 멈춘다(반복 꺼짐일 때).
   // 큐를 못 채운 채 끝에 닿았다는 뜻이므로, 마지막으로 한 번 더 채워보고 이어서 재생한다.
+  //
+  // 2026-08-31 보강: 예전엔 이 캐치올이 ended 직후 딱 1회였다 — 그 순간 네트워크가 나빴으면
+  // (백그라운드 전환 직후 라디오가 내려간 폰에서 흔함) 재시도 기회 없이 재생이 영구 정지했다.
+  // 실패하면 8초 간격으로 몇 번 더 두드리고(백그라운드 타이머가 이 간격을 늘려도 "언젠가는"
+  // 돈다), 형이 화면을 다시 보는 순간(visibilitychange)에도 즉시 한 번 더 시도한다.
+  var END_REFILL_RETRY_MS = 8000;
+  var END_REFILL_MAX_TRIES = 6;
+  let endRefillTimer = null;
+  let endRefillTries = 0;
+
+  async function refillAtEnd() {
+    const s = state();
+    if (!s || s.playing) { endRefillTries = 0; return; } // 이미 다음 곡으로 넘어갔으면 할 일 없음
+    if (typeof repeatMode !== 'undefined' && repeatMode !== 0) return;
+    if (s.idx !== s.tracks.length - 1) return;    // 끝 곡이 아니면 app.js가 알아서 처리한 것
+    let extended = false;
+    try {
+      if (typeof maybeExtendQueue !== 'function') return;
+      await maybeExtendQueue(s.pl);
+      const after = state();
+      if (after && !after.playing && after.idx < after.tracks.length - 1 && typeof nextTrack === 'function') {
+        extended = true;
+        endRefillTries = 0;
+        nextTrack();
+      }
+    } catch {}
+    if (!extended && endRefillTries < END_REFILL_MAX_TRIES) {
+      endRefillTries++;
+      clearTimeout(endRefillTimer);
+      endRefillTimer = setTimeout(refillAtEnd, END_REFILL_RETRY_MS);
+    }
+  }
+
   audio.addEventListener('ended', () => {
-    setTimeout(async () => {
-      const s = state();
-      if (!s || s.playing) return;                  // 이미 다음 곡으로 넘어갔으면 할 일 없음
-      if (typeof repeatMode !== 'undefined' && repeatMode !== 0) return;
-      if (s.idx !== s.tracks.length - 1) return;    // 끝 곡이 아니면 app.js가 알아서 처리한 것
-      try {
-        if (typeof maybeExtendQueue !== 'function') return;
-        await maybeExtendQueue(s.pl);
-        const after = state();
-        if (after && after.idx < after.tracks.length - 1 && typeof nextTrack === 'function') {
-          nextTrack();
-        }
-      } catch {}
-    }, 0);
+    endRefillTries = 0;
+    setTimeout(refillAtEnd, 0);
+  });
+  // 재생이 (어떤 경로로든) 다시 시작되면 끝곡 재시도는 더 필요 없다.
+  audio.addEventListener('playing', () => {
+    clearTimeout(endRefillTimer);
+    endRefillTimer = null;
+    endRefillTries = 0;
   });
 
   // 진도 추적은 감시 주기보다 촘촘하게 — 백그라운드에서 타이머가 느려져도 마지막으로 소리가
@@ -168,6 +208,6 @@
   // 형이 폰을 다시 켜서 화면을 보는 순간만큼은 즉시 한 번 확인해서, 돌아왔을 때 이미
   // 멈춰 있는 상황을 최대한 짧게 만든다.
   document.addEventListener('visibilitychange', () => {
-    if (!document.hidden) { watchdog(); keepQueueFilled(); }
+    if (!document.hidden) { watchdog(); keepQueueFilled(); refillAtEnd(); }
   });
 })();
