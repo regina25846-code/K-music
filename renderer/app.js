@@ -789,7 +789,7 @@ $('settings-ov').addEventListener('click', e => { if(e.target===$('settings-ov')
 $('cfg-auto').onchange = function() { $('auto-sub').textContent = this.checked ? '켜짐' : '꺼짐'; };
 $('yt-api-key-guide').onclick = (e) => {
   e.preventDefault();
-  window.api.openExternal('https://regina25846-code.github.io/K-music/#api-guide');
+  window.api.openExternal('https://music.krisb-infra.com/#api');
 };
 $('cfg-yt-api-key').oninput = () => { $('yt-api-status').textContent = ''; $('yt-api-status').className = 'yt-api-status'; };
 $('btn-yt-api-check').onclick = async () => {
