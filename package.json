@@ -7,7 +7,9 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "build": "electron-builder --win --x64 --publish never"
+    "build": "electron-builder --win --x64 --publish never",
+    "build:protected": "node build/protect.js --build",
+    "verify:protected": "node build/verify_protected.js"
   },
   "build": {
     "appId": "com.kris.music",
@@ -16,7 +18,9 @@
     "files": [
       "**/*",
       "!mobile",
-      "!mobile${/*}"
+      "!mobile${/*}",
+      "!build/protect.js",
+      "!build/verify_protected.js"
     ],
     "compression": "maximum",
     "electronLanguages": [
@@ -69,7 +73,9 @@
   },
   "devDependencies": {
     "electron": "^31.7.7",
-    "electron-builder": "^24.13.3"
+    "electron-builder": "^24.13.3",
+    "html-minifier-terser": "^7.2.0",
+    "terser": "^5.51.2"
   },
   "dependencies": {
     "electron-updater": "^6.8.9"

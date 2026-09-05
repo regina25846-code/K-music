@@ -796,7 +796,7 @@ $('btn-yt-api-check').onclick = async () => {
   const key = $('cfg-yt-api-key').value.trim();
   const statusEl = $('yt-api-status');
   const btn = $('btn-yt-api-check');
-  if (!key) { statusEl.textContent = '키를 먼저 입력해줘'; statusEl.className = 'yt-api-status err'; return; }
+  if (!key) { statusEl.textContent = '키를 먼저 입력해 주세요'; statusEl.className = 'yt-api-status err'; return; }
   btn.disabled = true;
   statusEl.textContent = '확인 중...';
   statusEl.className = 'yt-api-status';
@@ -806,7 +806,7 @@ $('btn-yt-api-check').onclick = async () => {
     statusEl.textContent = '✓ 정상 작동';
     statusEl.className = 'yt-api-status ok';
   } else {
-    statusEl.textContent = '✗ 키 오류 — 다시 확인해줘';
+    statusEl.textContent = '✗ 키 오류 — 다시 확인해 주세요';
     statusEl.className = 'yt-api-status err';
   }
 };
@@ -995,7 +995,7 @@ function renderPlView() {
     };
     el.querySelector('[data-a="del"]').onclick = async e => {
       e.stopPropagation();
-      if (playlists.length<=1) { toast('마지막 플레이리스트는 삭제 불가'); return; }
+      if (playlists.length<=1) { toast('마지막 플레이리스트는 삭제할 수 없어요'); return; }
       playlists.splice(i,1); if(currentPl>=playlists.length) currentPl=playlists.length-1;
       // keep playingPl valid: if the playing playlist itself was deleted, stop;
       // if a playlist before it was removed, its index shifted down by one.
@@ -1256,7 +1256,7 @@ function renderLyricsPreview() {
     updateLyricsHighlight(true);
   } else {
     lyrResetLink.style.display = 'none';
-    lyrBadgeTx.textContent = '가사 (텍스트만) · 줄을 탭하면 그 지점부터 동기화, 휠로 스크롤 가능';
+    lyrBadgeTx.textContent = '가사 (텍스트만) · 줄을 탭하면 그 지점부터 동기화되고, 휠로 스크롤할 수 있습니다';
     // 동기화 정보가 없으니 시간 기준 스크롤이 불가능함 — 가사 전체 블록을 세로 중앙(-50%)에 맞추면
     // 긴 가사일수록 화면엔 중간 아무 구간이나 걸려서 곡 시작과 무관한 부분이 보이는 버그가 있었음(2026-07-19).
     // 그래서 첫 줄부터 보이도록 컨테이너 맨 위에 붙인다.
@@ -1338,7 +1338,7 @@ lyrResetLink.addEventListener('click', (e) => {
   plainScrollOffsetPx = 0;
   renderLyricsPreview();
   if (lyricsForYtUrl) window.api.saveManualSync(lyricsForYtUrl, []);
-  toast('동기화 해제됨');
+  toast('동기화를 해제했어요');
 });
 
 function updateLyricsHighlight(force) {
@@ -1420,7 +1420,7 @@ artSeekBack.addEventListener('click', () => seekBy(5));
 async function togglePlay() {
   if (!audio.src) {
     const tracks = playlists[currentPl].tracks;
-    if (!tracks.length) { toast('플레이리스트가 비어있습니다'); return; }
+    if (!tracks.length) { toast('플레이리스트가 비어 있어요'); return; }
     playTrack(0); return;
   }
   if (isPlaying) { audio.pause(); isPlaying=false; setPlayIcon(false); }
@@ -1636,7 +1636,7 @@ $('ctx-copy-link').onclick = async (e) => {
   const track = playlists[currentPl]?.tracks[_ctxIdx];
   if (!track?.ytUrl) return;
   await window.api.copyText(track.ytUrl);
-  toast('링크를 복사했습니다');
+  toast('링크를 복사했어요');
 };
 // 형이 의도치 않은 채널이 추천에 계속 끼어들 때 직접 끊는 스위치(2026-08-08 추가) — 채널을
 // 차단하면 scoreCandidate가 -Infinity 처리해서 그 채널은 앞으로 추천 후보에서 아예 빠진다.
@@ -1714,7 +1714,7 @@ window.api.onUpdateAvailable(() => {
 });
 window.api.onUpdateNotAvailable(() => {
   $('about-check-update').disabled = false;
-  $('about-update-status').textContent = '최신 버전 사용 중입니다.';
+  $('about-update-status').textContent = '최신 버전을 사용 중이에요.';
 });
 window.api.onUpdateError((msg) => {
   $('about-check-update').disabled = false;
@@ -1796,7 +1796,7 @@ $('btn-pin').onclick = async function() {
   }
 
   const ytc = await window.api.checkYtdlp();
-  if (!ytc.ok) toast('yt-dlp를 찾을 수 없습니다');
+  if (!ytc.ok) toast('yt-dlp를 찾을 수 없어요');
 
   // 시작 직후 선행 워밍 — 형이 첫 곡을 누르기 전에 앞쪽 곡의 스트림 주소를 미리 받아둔다.
   // 3초 지연을 두는 이유: 이어듣기 자동재생(playTrack)이 지금 자기 곡을 받아오는 중일 수
